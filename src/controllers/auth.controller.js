@@ -7,19 +7,19 @@ const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '7d' });
 };
 
-// ✅ Production-Ready Cookie Options - Vercel
+// ✅ Production-Ready Cookie Options
 const getCookieOptions = () => {
   const isProduction = process.env.NODE_ENV === 'production';
   
   return {
     httpOnly: true,
-    secure: true, 
-    sameSite: 'none', 
+    secure: true, // HTTPS only
+    sameSite: 'none', // Cross-site requests
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     path: '/',
-    // domain: isProduction ? '.vercel.app' : undefined, 
+    // Domain excluded - browser handles it automatically
   };
-}; 
+};
 
 const register = async (req, res) => {
   try {
@@ -223,7 +223,6 @@ const logout = async (req, res) => {
     secure: true,
     sameSite: 'none',
     path: '/',
-    domain: process.env.NODE_ENV === 'production' ? '.vercel.app' : undefined,
   });
   res.json({ 
     success: true,
