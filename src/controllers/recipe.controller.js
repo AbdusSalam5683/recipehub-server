@@ -182,7 +182,7 @@ const getFeaturedRecipes = async (req, res) => {
 
     res.json({
       success: true,
-      recipes: populatedRecipes.slice(0, 6)
+      recipes: populatedRecipes.slice(0, 3) // Limit to 3 featured recipes  
     });
   } catch (error) {
     console.error('Get featured recipes error:', error);
@@ -200,7 +200,7 @@ const getPopularRecipes = async (req, res) => {
     // Sort by likesCount
     const sortedRecipes = recipes
       .sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0))
-      .slice(0, 6);
+      .slice(0, 3);
 
     // Populate authors
     const populatedRecipes = [];

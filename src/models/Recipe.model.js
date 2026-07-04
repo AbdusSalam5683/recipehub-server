@@ -6,6 +6,20 @@ const getCollection = () => {
   return db.collection('recipes');
 };
 
+// Get next auto-increment ID for recipes
+const getNextId = async () => {
+  const collection = getCollection();
+  const lastRecipe = await collection.find().sort({ _id: -1 }).limit(1).toArray();
+  if (lastRecipe.length === 0) {
+    return 1;
+  }
+  if (typeof lastRecipe[0]._id === 'number') {
+    return lastRecipe[0]._id + 1;
+  }
+  const count = await collection.countDocuments();
+  return count + 1;
+};
+
 const Recipe = {
   find: async (filter = {}) => {
     const collection = getCollection();
@@ -37,8 +51,7 @@ const Recipe = {
   
   create: async (data) => {
     const collection = getCollection();
-    const lastRecipe = await collection.find().sort({ _id: -1 }).limit(1).toArray();
-    const nextId = lastRecipe.length > 0 ? lastRecipe[0]._id + 1 : 1;
+    const nextId = await getNextId();
     
     const result = await collection.insertOne({
       _id: nextId,

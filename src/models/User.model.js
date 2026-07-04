@@ -6,6 +6,22 @@ const getCollection = () => {
   return db.collection('users');
 };
 
+// Get next auto-increment ID
+const getNextId = async () => {
+  const collection = getCollection();
+  const lastUser = await collection.find().sort({ _id: -1 }).limit(1).toArray();
+  if (lastUser.length === 0) {
+    return 1;
+  }
+  // If last _id is a number, increment it
+  if (typeof lastUser[0]._id === 'number') {
+    return lastUser[0]._id + 1;
+  }
+  // If last _id is a string (ObjectId), count documents and use that
+  const count = await collection.countDocuments();
+  return count + 1;
+};
+
 const User = {
   find: async (filter = {}) => {
     const collection = getCollection();
@@ -20,17 +36,14 @@ const User = {
   findById: async (id) => {
     const collection = getCollection();
     try {
-      // Check if id is a number (from seed data)
       if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
         const numericId = typeof id === 'string' ? parseInt(id) : id;
         return await collection.findOne({ _id: numericId });
       }
-      // Otherwise try as ObjectId
       const objectId = typeof id === 'string' ? new ObjectId(id) : id;
       return await collection.findOne({ _id: objectId });
     } catch (error) {
       console.error('FindById error:', error);
-      // Try as number if ObjectId fails
       if (typeof id === 'string' && /^\d+$/.test(id)) {
         return await collection.findOne({ _id: parseInt(id) });
       }
@@ -40,9 +53,7 @@ const User = {
   
   create: async (data) => {
     const collection = getCollection();
-    // Get next available _id
-    const lastUser = await collection.find().sort({ _id: -1 }).limit(1).toArray();
-    const nextId = lastUser.length > 0 ? lastUser[0]._id + 1 : 1;
+    const nextId = await getNextId();
     
     const result = await collection.insertOne({
       _id: nextId,
