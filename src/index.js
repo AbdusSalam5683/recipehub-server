@@ -11,15 +11,36 @@ dotenv.config();
 
 const app = express();
 
-// Middleware
-app.use(helmet());
-app.use(morgan('dev'));
+// ✅ Production-Ready CORS Configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'https://recipehub-client-six.vercel.app',
+  'https://recipehub-server-psi.vercel.app',
+  process.env.CLIENT_URL
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.warn('⚠️ CORS blocked for origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Set-Cookie']
 }));
+
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
@@ -27,13 +48,11 @@ app.use(cookieParser());
 // MongoDB Connection
 const uri = process.env.MONGODB_URI;
 
-// Check if URI exists
 if (!uri) {
   console.error('❌ MONGODB_URI is not defined in .env file');
   process.exit(1);
 }
 
-// Check if URI format is correct
 if (!uri.startsWith('mongodb://') && !uri.startsWith('mongodb+srv://')) {
   console.error('❌ Invalid MONGODB_URI format. Must start with mongodb:// or mongodb+srv://');
   console.error(`Current URI: ${uri}`);

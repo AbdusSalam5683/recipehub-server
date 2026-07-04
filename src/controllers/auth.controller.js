@@ -7,6 +7,18 @@ const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '7d' });
 };
 
+// ✅ Production-Ready Cookie Options
+const getCookieOptions = () => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/',
+  };
+};
+
 const register = async (req, res) => {
   try {
     const { name, email, password, image } = req.body;
@@ -42,11 +54,25 @@ const register = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Image processing - imgBB upload if provided
+    let imageUrl = image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
+    
+    if (image && image.startsWith('data:image')) {
+      try {
+        const { uploadToImgBB } = require('../utils/imgbbUploader');
+        imageUrl = await uploadToImgBB(image);
+        console.log('✅ Profile image uploaded to imgBB');
+      } catch (uploadError) {
+        console.error('Image upload failed, using default avatar:', uploadError.message);
+        imageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
+      }
+    }
+
     const user = await User.create({
       name,
       email: email.toLowerCase(),
       password: hashedPassword,
-      image: image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
+      image: imageUrl,
       role: 'user',
       isPremium: false,
       isBlocked: false
@@ -54,12 +80,7 @@ const register = async (req, res) => {
 
     const token = generateToken(user._id.toString());
 
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+    res.cookie('token', token, getCookieOptions());
 
     const { password: _, ...userWithoutPassword } = user;
     res.status(201).json({
@@ -112,12 +133,7 @@ const login = async (req, res) => {
 
     const token = generateToken(user._id.toString());
 
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+    res.cookie('token', token, getCookieOptions());
 
     const { password: _, ...userWithoutPassword } = user;
     res.json({
@@ -145,17 +161,28 @@ const googleLogin = async (req, res) => {
       });
     }
 
-    // Check if user exists
     let user = await User.findOne({ email: email.toLowerCase() });
 
     if (!user) {
-      // Create new user with random password
       const hashedPassword = await bcrypt.hash(Math.random().toString(36), 10);
+      
+      let imageUrl = image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || email)}&background=random`;
+      
+      if (image && image.startsWith('data:image')) {
+        try {
+          const { uploadToImgBB } = require('../utils/imgbbUploader');
+          imageUrl = await uploadToImgBB(image);
+        } catch (uploadError) {
+          console.error('Google image upload failed:', uploadError.message);
+          imageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name || email)}&background=random`;
+        }
+      }
+
       user = await User.create({
         name: name || email.split('@')[0],
         email: email.toLowerCase(),
         password: hashedPassword,
-        image: image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || email)}&background=random`,
+        image: imageUrl,
         role: 'user',
         isPremium: false,
         isBlocked: false
@@ -163,7 +190,6 @@ const googleLogin = async (req, res) => {
       console.log('✅ New user created via Google:', user.email);
     }
 
-    // Check if user is blocked
     if (user.isBlocked) {
       return res.status(403).json({ 
         success: false,
@@ -171,16 +197,9 @@ const googleLogin = async (req, res) => {
       });
     }
 
-    // Generate token
     const token = generateToken(user._id.toString());
 
-    // Set cookie
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
+    res.cookie('token', token, getCookieOptions());
 
     const { password: _, ...userWithoutPassword } = user;
     res.json({
@@ -198,7 +217,12 @@ const googleLogin = async (req, res) => {
 };
 
 const logout = async (req, res) => {
-  res.clearCookie('token');
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/',
+  });
   res.json({ 
     success: true,
     message: 'Logged out successfully' 
