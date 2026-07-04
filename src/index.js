@@ -26,6 +26,22 @@ app.use(cookieParser());
 
 // MongoDB Connection
 const uri = process.env.MONGODB_URI;
+
+// Check if URI exists
+if (!uri) {
+  console.error('❌ MONGODB_URI is not defined in .env file');
+  process.exit(1);
+}
+
+// Check if URI format is correct
+if (!uri.startsWith('mongodb://') && !uri.startsWith('mongodb+srv://')) {
+  console.error('❌ Invalid MONGODB_URI format. Must start with mongodb:// or mongodb+srv://');
+  console.error(`Current URI: ${uri}`);
+  process.exit(1);
+}
+
+console.log('🔗 Connecting to MongoDB...');
+
 const client = new MongoClient(uri);
 let db;
 
@@ -39,6 +55,7 @@ async function connectToMongoDB() {
   } catch (err) {
     console.error('❌ MongoDB connection error:', err.message);
     console.log('💡 Please check your MONGODB_URI in .env file');
+    console.log('💡 Make sure the password is URL encoded');
     process.exit(1);
   }
 }

@@ -145,9 +145,11 @@ const googleLogin = async (req, res) => {
       });
     }
 
+    // Check if user exists
     let user = await User.findOne({ email: email.toLowerCase() });
 
     if (!user) {
+      // Create new user with random password
       const hashedPassword = await bcrypt.hash(Math.random().toString(36), 10);
       user = await User.create({
         name: name || email.split('@')[0],
@@ -158,8 +160,10 @@ const googleLogin = async (req, res) => {
         isPremium: false,
         isBlocked: false
       });
+      console.log('✅ New user created via Google:', user.email);
     }
 
+    // Check if user is blocked
     if (user.isBlocked) {
       return res.status(403).json({ 
         success: false,
@@ -167,8 +171,10 @@ const googleLogin = async (req, res) => {
       });
     }
 
+    // Generate token
     const token = generateToken(user._id.toString());
 
+    // Set cookie
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
