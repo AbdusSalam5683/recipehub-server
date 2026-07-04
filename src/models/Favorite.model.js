@@ -1,29 +1,75 @@
 // server/src/models/Favorite.model.js
-const mongoose = require('mongoose');
+const { ObjectId } = require('mongodb');
 
-const favoriteSchema = new mongoose.Schema({
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+const getCollection = () => {
+  const db = global.getDB();
+  return db.collection('favorites');
+};
+
+const Favorite = {
+  find: async (filter = {}) => {
+    const collection = getCollection();
+    return await collection.find(filter).toArray();
   },
-  userEmail: {
-    type: String,
-    required: true
+  
+  findOne: async (filter) => {
+    const collection = getCollection();
+    return await collection.findOne(filter);
   },
-  recipeId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Recipe',
-    required: true
+  
+  findById: async (id) => {
+    const collection = getCollection();
+    try {
+      if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
+        const numericId = typeof id === 'string' ? parseInt(id) : id;
+        return await collection.findOne({ _id: numericId });
+      }
+      const objectId = typeof id === 'string' ? new ObjectId(id) : id;
+      return await collection.findOne({ _id: objectId });
+    } catch (error) {
+      return null;
+    }
+  },
+  
+  create: async (data) => {
+    const collection = getCollection();
+    const lastItem = await collection.find().sort({ _id: -1 }).limit(1).toArray();
+    const nextId = lastItem.length > 0 ? lastItem[0]._id + 1 : 1;
+    
+    const result = await collection.insertOne({
+      _id: nextId,
+      ...data,
+      addedAt: new Date()
+    });
+    return await collection.findOne({ _id: nextId });
+  },
+  
+  deleteOne: async (filter) => {
+    const collection = getCollection();
+    return await collection.deleteOne(filter);
+  },
+  
+  deleteById: async (id) => {
+    const collection = getCollection();
+    try {
+      let query = {};
+      if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
+        const numericId = typeof id === 'string' ? parseInt(id) : id;
+        query = { _id: numericId };
+      } else {
+        const objectId = typeof id === 'string' ? new ObjectId(id) : id;
+        query = { _id: objectId };
+      }
+      return await collection.deleteOne(query);
+    } catch (error) {
+      return null;
+    }
+  },
+  
+  countDocuments: async (filter = {}) => {
+    const collection = getCollection();
+    return await collection.countDocuments(filter);
   }
-}, {
-  timestamps: {
-    createdAt: 'addedAt',
-    updatedAt: false
-  }
-});
+};
 
-// Ensure one favorite per user per recipe
-favoriteSchema.index({ userId: 1, recipeId: 1 }, { unique: true });
-
-module.exports = mongoose.model('Favorite', favoriteSchema);
+module.exports = Favorite;

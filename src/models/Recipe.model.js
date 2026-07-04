@@ -1,90 +1,113 @@
 // server/src/models/Recipe.model.js
-const mongoose = require('mongoose');
+const { ObjectId } = require('mongodb');
 
-const recipeSchema = new mongoose.Schema({
-  recipeName: {
-    type: String,
-    required: [true, 'Recipe name is required'],
-    trim: true,
-    maxlength: [100, 'Recipe name cannot exceed 100 characters']
+const getCollection = () => {
+  const db = global.getDB();
+  return db.collection('recipes');
+};
+
+const Recipe = {
+  find: async (filter = {}) => {
+    const collection = getCollection();
+    return await collection.find(filter).toArray();
   },
-  recipeImage: {
-    type: String,
-    required: [true, 'Recipe image is required']
+  
+  findOne: async (filter) => {
+    const collection = getCollection();
+    return await collection.findOne(filter);
   },
-  category: {
-    type: String,
-    required: [true, 'Category is required'],
-    enum: ['Breakfast', 'Lunch', 'Dinner', 'Dessert', 'Snack', 'Beverage', 'Soup', 'Salad']
-  },
-  cuisineType: {
-    type: String,
-    required: [true, 'Cuisine type is required'],
-    enum: ['Bangladeshi', 'Indian', 'Chinese', 'Thai', 'Italian', 'Mexican', 'American', 'French', 'Japanese', 'Korean', 'Other']
-  },
-  difficultyLevel: {
-    type: String,
-    required: [true, 'Difficulty level is required'],
-    enum: ['Easy', 'Medium', 'Hard']
-  },
-  preparationTime: {
-    type: Number,
-    required: [true, 'Preparation time is required'],
-    min: [1, 'Preparation time must be at least 1 minute']
-  },
-  ingredients: {
-    type: [String],
-    required: [true, 'Ingredients are required'],
-    validate: {
-      validator: function(v) {
-        return Array.isArray(v) && v.length > 0;
-      },
-      message: 'At least one ingredient is required'
+  
+  findById: async (id) => {
+    const collection = getCollection();
+    try {
+      if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
+        const numericId = typeof id === 'string' ? parseInt(id) : id;
+        return await collection.findOne({ _id: numericId });
+      }
+      const objectId = typeof id === 'string' ? new ObjectId(id) : id;
+      return await collection.findOne({ _id: objectId });
+    } catch (error) {
+      console.error('FindById error:', error);
+      if (typeof id === 'string' && /^\d+$/.test(id)) {
+        return await collection.findOne({ _id: parseInt(id) });
+      }
+      return null;
     }
   },
-  instructions: {
-    type: String,
-    required: [true, 'Instructions are required'],
-    minlength: [10, 'Instructions must be at least 10 characters']
+  
+  create: async (data) => {
+    const collection = getCollection();
+    const lastRecipe = await collection.find().sort({ _id: -1 }).limit(1).toArray();
+    const nextId = lastRecipe.length > 0 ? lastRecipe[0]._id + 1 : 1;
+    
+    const result = await collection.insertOne({
+      _id: nextId,
+      ...data,
+      likesCount: 0,
+      isFeatured: false,
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+    return await collection.findOne({ _id: nextId });
   },
-  authorId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+  
+  updateOne: async (filter, update) => {
+    const collection = getCollection();
+    const result = await collection.updateOne(filter, {
+      $set: { ...update, updatedAt: new Date() }
+    });
+    return result;
   },
-  authorName: {
-    type: String,
-    required: true
+  
+  updateById: async (id, update) => {
+    const collection = getCollection();
+    try {
+      let query = {};
+      if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
+        const numericId = typeof id === 'string' ? parseInt(id) : id;
+        query = { _id: numericId };
+      } else {
+        const objectId = typeof id === 'string' ? new ObjectId(id) : id;
+        query = { _id: objectId };
+      }
+      const result = await collection.updateOne(query, {
+        $set: { ...update, updatedAt: new Date() }
+      });
+      return result;
+    } catch (error) {
+      console.error('UpdateById error:', error);
+      return null;
+    }
   },
-  authorEmail: {
-    type: String,
-    required: true
+  
+  deleteById: async (id) => {
+    const collection = getCollection();
+    try {
+      let query = {};
+      if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
+        const numericId = typeof id === 'string' ? parseInt(id) : id;
+        query = { _id: numericId };
+      } else {
+        const objectId = typeof id === 'string' ? new ObjectId(id) : id;
+        query = { _id: objectId };
+      }
+      return await collection.deleteOne(query);
+    } catch (error) {
+      console.error('DeleteById error:', error);
+      return null;
+    }
   },
-  likesCount: {
-    type: Number,
-    default: 0,
-    min: 0
+  
+  countDocuments: async (filter = {}) => {
+    const collection = getCollection();
+    return await collection.countDocuments(filter);
   },
-  isFeatured: {
-    type: Boolean,
-    default: false
-  },
-  status: {
-    type: String,
-    enum: ['active', 'reported', 'deleted'],
-    default: 'active'
-  },
-  isPremiumOnly: {
-    type: Boolean,
-    default: false
+  
+  aggregate: async (pipeline) => {
+    const collection = getCollection();
+    return await collection.aggregate(pipeline).toArray();
   }
-}, {
-  timestamps: true
-});
+};
 
-// Index for better query performance
-recipeSchema.index({ category: 1, status: 1 });
-recipeSchema.index({ authorId: 1, status: 1 });
-recipeSchema.index({ likesCount: -1 });
-
-module.exports = mongoose.model('Recipe', recipeSchema);
+module.exports = Recipe;

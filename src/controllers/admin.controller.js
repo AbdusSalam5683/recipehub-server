@@ -2,16 +2,13 @@
 const User = require('../models/User.model');
 const Recipe = require('../models/Recipe.model');
 const Report = require('../models/Report.model');
-const Payment = require('../models/Payment.model');
 
 const getOverview = async (req, res) => {
   try {
-    const [totalUsers, totalRecipes, totalPremium, totalReports] = await Promise.all([
-      User.countDocuments(),
-      Recipe.countDocuments({ status: 'active' }),
-      User.countDocuments({ isPremium: true }),
-      Report.countDocuments({ status: 'pending' })
-    ]);
+    const totalUsers = await User.countDocuments();
+    const totalRecipes = await Recipe.countDocuments({ status: 'active' });
+    const totalPremium = await User.countDocuments({ isPremium: true });
+    const totalReports = await Report.countDocuments({ status: 'pending' });
 
     res.json({
       success: true,
@@ -33,10 +30,15 @@ const getOverview = async (req, res) => {
 
 const getUsers = async (req, res) => {
   try {
-    const users = await User.find().select('-password').sort({ createdAt: -1 });
+    const users = await User.find();
+    const usersWithoutPassword = users.map(user => {
+      const { password, ...rest } = user;
+      return rest;
+    });
+    
     res.json({
       success: true,
-      users
+      users: usersWithoutPassword
     });
   } catch (error) {
     console.error('Get users error:', error);
@@ -72,13 +74,14 @@ const toggleBlockUser = async (req, res) => {
       });
     }
 
-    user.isBlocked = !user.isBlocked;
-    await user.save();
-
+    await User.updateById(req.params.id, { isBlocked: !user.isBlocked });
+    const updatedUser = await User.findById(req.params.id);
+    
+    const { password, ...userWithoutPassword } = updatedUser;
     res.json({
       success: true,
-      message: `User ${user.isBlocked ? 'blocked' : 'unblocked'} successfully`,
-      user: user.toJSON()
+      message: `User ${updatedUser.isBlocked ? 'blocked' : 'unblocked'} successfully`,
+      user: userWithoutPassword
     });
   } catch (error) {
     console.error('Toggle block user error:', error);
@@ -91,12 +94,21 @@ const toggleBlockUser = async (req, res) => {
 
 const getAllRecipesAdmin = async (req, res) => {
   try {
-    const recipes = await Recipe.find()
-      .populate('authorId', 'name email image')
-      .sort({ createdAt: -1 });
+    const recipes = await Recipe.find();
+    
+    // Populate authors
+    const populatedRecipes = [];
+    for (const recipe of recipes) {
+      const author = await User.findById(recipe.authorId);
+      populatedRecipes.push({
+        ...recipe,
+        authorId: author || null
+      });
+    }
+
     res.json({
       success: true,
-      recipes
+      recipes: populatedRecipes
     });
   } catch (error) {
     console.error('Get all recipes admin error:', error);
@@ -118,13 +130,13 @@ const toggleFeatureRecipe = async (req, res) => {
       });
     }
 
-    recipe.isFeatured = !recipe.isFeatured;
-    await recipe.save();
+    await Recipe.updateById(req.params.id, { isFeatured: !recipe.isFeatured });
+    const updatedRecipe = await Recipe.findById(req.params.id);
 
     res.json({
       success: true,
-      message: `Recipe ${recipe.isFeatured ? 'featured' : 'unfeatured'} successfully`,
-      recipe
+      message: `Recipe ${updatedRecipe.isFeatured ? 'featured' : 'unfeatured'} successfully`,
+      recipe: updatedRecipe
     });
   } catch (error) {
     console.error('Toggle feature recipe error:', error);
@@ -137,13 +149,23 @@ const toggleFeatureRecipe = async (req, res) => {
 
 const getReports = async (req, res) => {
   try {
-    const reports = await Report.find({ status: 'pending' })
-      .populate('recipeId')
-      .populate('reporterId', 'name email')
-      .sort({ createdAt: -1 });
+    const reports = await Report.find({ status: 'pending' });
+    
+    // Populate recipe and reporter
+    const populatedReports = [];
+    for (const report of reports) {
+      const recipe = await Recipe.findById(report.recipeId);
+      const reporter = await User.findById(report.reporterId);
+      populatedReports.push({
+        ...report,
+        recipeId: recipe || null,
+        reporterId: reporter || null
+      });
+    }
+
     res.json({
       success: true,
-      reports
+      reports: populatedReports
     });
   } catch (error) {
     console.error('Get reports error:', error);
@@ -156,7 +178,7 @@ const getReports = async (req, res) => {
 
 const handleReport = async (req, res) => {
   try {
-    const { action } = req.body; // 'remove' or 'dismiss'
+    const { action } = req.body;
     const reportId = req.params.id;
 
     if (!action || !['remove', 'dismiss'].includes(action)) {
@@ -183,22 +205,18 @@ const handleReport = async (req, res) => {
     }
 
     if (action === 'remove') {
-      // Delete the recipe
-      await Recipe.findByIdAndDelete(report.recipeId);
-      report.status = 'resolved';
+      await Recipe.deleteById(report.recipeId);
+      await Report.updateById(reportId, { status: 'resolved' });
     } else if (action === 'dismiss') {
-      // Dismiss the report
-      report.status = 'dismissed';
-      // Reactivate the recipe
-      await Recipe.findByIdAndUpdate(report.recipeId, { status: 'active' });
+      await Report.updateById(reportId, { status: 'dismissed' });
+      await Recipe.updateById(report.recipeId, { status: 'active' });
     }
 
-    await report.save();
-
+    const updatedReport = await Report.findById(reportId);
     res.json({
       success: true,
       message: `Report ${action === 'remove' ? 'resolved and recipe removed' : 'dismissed'} successfully`,
-      report
+      report: updatedReport
     });
   } catch (error) {
     console.error('Handle report error:', error);

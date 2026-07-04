@@ -3,7 +3,6 @@ const imgbbUploader = require('imgbb-uploader');
 
 const uploadToImgBB = async (imageBase64) => {
   try {
-    // Remove data:image/...;base64, prefix if exists
     let base64Image = imageBase64;
     if (imageBase64.includes(';base64,')) {
       base64Image = imageBase64.split(';base64,')[1];

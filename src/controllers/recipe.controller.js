@@ -4,6 +4,7 @@ const Favorite = require('../models/Favorite.model');
 const Report = require('../models/Report.model');
 const User = require('../models/User.model');
 const { uploadToImgBB } = require('../utils/imgbbUploader');
+const { ObjectId } = require('mongodb');
 
 const createRecipe = async (req, res) => {
   try {
@@ -19,7 +20,6 @@ const createRecipe = async (req, res) => {
       instructions
     } = req.body;
 
-    // Validate required fields
     if (!recipeName || !category || !cuisineType || !difficultyLevel || !preparationTime || !ingredients || !instructions) {
       return res.status(400).json({
         success: false,
@@ -27,7 +27,6 @@ const createRecipe = async (req, res) => {
       });
     }
 
-    // Check user recipe limit
     const user = await User.findById(userId);
     const userRecipesCount = await Recipe.countDocuments({ 
       authorId: userId,
@@ -41,18 +40,16 @@ const createRecipe = async (req, res) => {
       });
     }
 
-    // Upload image to imgBB if base64 provided
     let imageUrl = recipeImage;
     if (recipeImage && recipeImage.startsWith('data:image')) {
       imageUrl = await uploadToImgBB(recipeImage);
     }
 
-    // Process ingredients
     const ingredientsArray = Array.isArray(ingredients) 
       ? ingredients 
       : ingredients.split(',').map(item => item.trim()).filter(Boolean);
 
-    const recipe = new Recipe({
+    const recipe = await Recipe.create({
       recipeName,
       recipeImage: imageUrl,
       category,
@@ -65,8 +62,6 @@ const createRecipe = async (req, res) => {
       authorName: user.name,
       authorEmail: user.email
     });
-
-    await recipe.save();
 
     res.status(201).json({
       success: true,
@@ -95,18 +90,45 @@ const getAllRecipes = async (req, res) => {
       filter.category = category;
     }
 
-    const [recipes, total] = await Promise.all([
-      Recipe.find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .populate('authorId', 'name image isPremium'),
-      Recipe.countDocuments(filter)
-    ]);
+    // Get total count
+    const total = await Recipe.countDocuments(filter);
+    
+    // Get paginated recipes
+    const recipes = await Recipe.find(filter);
+    
+    // Sort and paginate manually
+    const sortedRecipes = recipes
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(skip, skip + limit);
+
+    // Populate authors
+    const populatedRecipes = [];
+    for (const recipe of sortedRecipes) {
+      try {
+        const author = await User.findById(recipe.authorId);
+        if (author) {
+          const { password, ...authorWithoutPassword } = author;
+          populatedRecipes.push({
+            ...recipe,
+            authorId: authorWithoutPassword
+          });
+        } else {
+          populatedRecipes.push({
+            ...recipe,
+            authorId: null
+          });
+        }
+      } catch (err) {
+        populatedRecipes.push({
+          ...recipe,
+          authorId: null
+        });
+      }
+    }
 
     res.json({
       success: true,
-      recipes,
+      recipes: populatedRecipes,
       pagination: {
         page,
         limit,
@@ -128,14 +150,36 @@ const getFeaturedRecipes = async (req, res) => {
     const recipes = await Recipe.find({ 
       isFeatured: true, 
       status: 'active' 
-    })
-    .limit(6)
-    .sort({ createdAt: -1 })
-    .populate('authorId', 'name image isPremium');
+    });
+
+    // Populate authors
+    const populatedRecipes = [];
+    for (const recipe of recipes) {
+      try {
+        const author = await User.findById(recipe.authorId);
+        if (author) {
+          const { password, ...authorWithoutPassword } = author;
+          populatedRecipes.push({
+            ...recipe,
+            authorId: authorWithoutPassword
+          });
+        } else {
+          populatedRecipes.push({
+            ...recipe,
+            authorId: null
+          });
+        }
+      } catch (err) {
+        populatedRecipes.push({
+          ...recipe,
+          authorId: null
+        });
+      }
+    }
 
     res.json({
       success: true,
-      recipes
+      recipes: populatedRecipes.slice(0, 6)
     });
   } catch (error) {
     console.error('Get featured recipes error:', error);
@@ -148,14 +192,41 @@ const getFeaturedRecipes = async (req, res) => {
 
 const getPopularRecipes = async (req, res) => {
   try {
-    const recipes = await Recipe.find({ status: 'active' })
-      .sort({ likesCount: -1, createdAt: -1 })
-      .limit(6)
-      .populate('authorId', 'name image isPremium');
+    const recipes = await Recipe.find({ status: 'active' });
+    
+    // Sort by likesCount
+    const sortedRecipes = recipes
+      .sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0))
+      .slice(0, 6);
+
+    // Populate authors
+    const populatedRecipes = [];
+    for (const recipe of sortedRecipes) {
+      try {
+        const author = await User.findById(recipe.authorId);
+        if (author) {
+          const { password, ...authorWithoutPassword } = author;
+          populatedRecipes.push({
+            ...recipe,
+            authorId: authorWithoutPassword
+          });
+        } else {
+          populatedRecipes.push({
+            ...recipe,
+            authorId: null
+          });
+        }
+      } catch (err) {
+        populatedRecipes.push({
+          ...recipe,
+          authorId: null
+        });
+      }
+    }
 
     res.json({
       success: true,
-      recipes
+      recipes: populatedRecipes
     });
   } catch (error) {
     console.error('Get popular recipes error:', error);
@@ -168,9 +239,8 @@ const getPopularRecipes = async (req, res) => {
 
 const getRecipeById = async (req, res) => {
   try {
-    const recipe = await Recipe.findById(req.params.id)
-      .populate('authorId', 'name image email isPremium isBlocked');
-
+    const recipe = await Recipe.findById(req.params.id);
+    
     if (!recipe) {
       return res.status(404).json({ 
         success: false,
@@ -185,9 +255,25 @@ const getRecipeById = async (req, res) => {
       });
     }
 
+    let author = null;
+    try {
+      author = await User.findById(recipe.authorId);
+      if (author) {
+        const { password, ...authorWithoutPassword } = author;
+        author = authorWithoutPassword;
+      }
+    } catch (err) {
+      author = null;
+    }
+
+    const recipeWithAuthor = {
+      ...recipe,
+      authorId: author
+    };
+
     res.json({
       success: true,
-      recipe
+      recipe: recipeWithAuthor
     });
   } catch (error) {
     console.error('Get recipe error:', error);
@@ -209,7 +295,6 @@ const updateRecipe = async (req, res) => {
       });
     }
 
-    // Check if user owns the recipe or is admin
     if (recipe.authorId.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
       return res.status(403).json({ 
         success: false,
@@ -220,7 +305,6 @@ const updateRecipe = async (req, res) => {
     const updates = req.body;
     const updateData = {};
 
-    // Process fields
     const allowedFields = ['recipeName', 'category', 'cuisineType', 'difficultyLevel', 'preparationTime', 'instructions'];
     allowedFields.forEach(field => {
       if (updates[field] !== undefined) {
@@ -228,14 +312,12 @@ const updateRecipe = async (req, res) => {
       }
     });
 
-    // Process image
     if (updates.recipeImage && updates.recipeImage.startsWith('data:image')) {
       updateData.recipeImage = await uploadToImgBB(updates.recipeImage);
     } else if (updates.recipeImage) {
       updateData.recipeImage = updates.recipeImage;
     }
 
-    // Process ingredients
     if (updates.ingredients) {
       if (typeof updates.ingredients === 'string') {
         updateData.ingredients = updates.ingredients.split(',').map(item => item.trim()).filter(Boolean);
@@ -244,11 +326,8 @@ const updateRecipe = async (req, res) => {
       }
     }
 
-    const updatedRecipe = await Recipe.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true, runValidators: true }
-    );
+    await Recipe.updateById(req.params.id, updateData);
+    const updatedRecipe = await Recipe.findById(req.params.id);
 
     res.json({
       success: true,
@@ -275,7 +354,6 @@ const deleteRecipe = async (req, res) => {
       });
     }
 
-    // Check if user owns the recipe or is admin
     if (recipe.authorId.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
       return res.status(403).json({ 
         success: false,
@@ -283,9 +361,7 @@ const deleteRecipe = async (req, res) => {
       });
     }
 
-    // Soft delete
-    recipe.status = 'deleted';
-    await recipe.save();
+    await Recipe.updateById(req.params.id, { status: 'deleted' });
 
     res.json({
       success: true,
@@ -312,19 +388,21 @@ const toggleLike = async (req, res) => {
     }
 
     const action = req.query.action || 'like';
+    let newLikesCount = recipe.likesCount || 0;
     
     if (action === 'like') {
-      recipe.likesCount += 1;
+      newLikesCount += 1;
     } else {
-      recipe.likesCount = Math.max(0, recipe.likesCount - 1);
+      newLikesCount = Math.max(0, newLikesCount - 1);
     }
 
-    await recipe.save();
+    await Recipe.updateById(req.params.id, { likesCount: newLikesCount });
+    const updatedRecipe = await Recipe.findById(req.params.id);
 
     res.json({ 
       success: true,
       message: action === 'like' ? 'Liked recipe' : 'Unliked recipe',
-      likesCount: recipe.likesCount
+      likesCount: updatedRecipe.likesCount
     });
   } catch (error) {
     console.error('Toggle like error:', error);
@@ -368,7 +446,7 @@ const reportRecipe = async (req, res) => {
       });
     }
 
-    const report = new Report({
+    await Report.create({
       recipeId,
       reporterEmail: req.user.email,
       reporterId: req.user._id,
@@ -376,16 +454,11 @@ const reportRecipe = async (req, res) => {
       description: description || ''
     });
 
-    await report.save();
-
-    // Update recipe status
-    recipe.status = 'reported';
-    await recipe.save();
+    await Recipe.updateById(recipeId, { status: 'reported' });
 
     res.status(201).json({
       success: true,
-      message: 'Recipe reported successfully',
-      report
+      message: 'Recipe reported successfully'
     });
   } catch (error) {
     console.error('Report recipe error:', error);
@@ -401,11 +474,36 @@ const getMyRecipes = async (req, res) => {
     const recipes = await Recipe.find({ 
       authorId: req.user._id,
       status: { $ne: 'deleted' }
-    }).sort({ createdAt: -1 });
+    });
+
+    // Populate author
+    const populatedRecipes = [];
+    for (const recipe of recipes) {
+      try {
+        const author = await User.findById(recipe.authorId);
+        if (author) {
+          const { password, ...authorWithoutPassword } = author;
+          populatedRecipes.push({
+            ...recipe,
+            authorId: authorWithoutPassword
+          });
+        } else {
+          populatedRecipes.push({
+            ...recipe,
+            authorId: null
+          });
+        }
+      } catch (err) {
+        populatedRecipes.push({
+          ...recipe,
+          authorId: null
+        });
+      }
+    }
 
     res.json({
       success: true,
-      recipes
+      recipes: populatedRecipes
     });
   } catch (error) {
     console.error('Get my recipes error:', error);

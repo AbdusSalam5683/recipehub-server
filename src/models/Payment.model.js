@@ -1,49 +1,51 @@
 // server/src/models/Payment.model.js
-const mongoose = require('mongoose');
+const { ObjectId } = require('mongodb');
 
-const paymentSchema = new mongoose.Schema({
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+const getCollection = () => {
+  const db = global.getDB();
+  return db.collection('payments');
+};
+
+const Payment = {
+  find: async (filter = {}) => {
+    const collection = getCollection();
+    return await collection.find(filter).toArray();
   },
-  userEmail: {
-    type: String,
-    required: true,
-    lowercase: true
+  
+  findOne: async (filter) => {
+    const collection = getCollection();
+    return await collection.findOne(filter);
   },
-  amount: {
-    type: Number,
-    required: true,
-    min: 0
+  
+  findById: async (id) => {
+    const collection = getCollection();
+    return await collection.findOne({ _id: new ObjectId(id) });
   },
-  recipeId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Recipe'
+  
+  create: async (data) => {
+    const collection = getCollection();
+    const result = await collection.insertOne({
+      ...data,
+      paymentStatus: 'pending',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+    return await collection.findOne({ _id: result.insertedId });
   },
-  transactionId: {
-    type: String,
-    required: true,
-    unique: true
+  
+  updateById: async (id, update) => {
+    const collection = getCollection();
+    const result = await collection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { ...update, updatedAt: new Date() } }
+    );
+    return result;
   },
-  paymentStatus: {
-    type: String,
-    enum: ['pending', 'success', 'failed'],
-    default: 'pending'
-  },
-  paymentType: {
-    type: String,
-    enum: ['premium_membership', 'recipe_purchase'],
-    required: true
-  },
-  paidAt: {
-    type: Date
+  
+  countDocuments: async (filter = {}) => {
+    const collection = getCollection();
+    return await collection.countDocuments(filter);
   }
-}, {
-  timestamps: true
-});
+};
 
-paymentSchema.index({ userId: 1, paymentStatus: 1 });
-paymentSchema.index({ transactionId: 1 });
-
-module.exports = mongoose.model('Payment', paymentSchema);
+module.exports = Payment;

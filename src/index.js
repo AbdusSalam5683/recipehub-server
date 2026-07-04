@@ -1,11 +1,11 @@
 // server/src/index.js
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
+const { MongoClient } = require('mongodb');
 
 dotenv.config();
 
@@ -23,6 +23,31 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
+
+// MongoDB Connection
+const uri = process.env.MONGODB_URI;
+const client = new MongoClient(uri);
+let db;
+
+async function connectToMongoDB() {
+  try {
+    await client.connect();
+    db = client.db();
+    console.log('✅ MongoDB connected successfully!');
+    await createAdminUser();
+    return client;
+  } catch (err) {
+    console.error('❌ MongoDB connection error:', err.message);
+    console.log('💡 Please check your MONGODB_URI in .env file');
+    process.exit(1);
+  }
+}
+
+function getDB() {
+  return db;
+}
+
+global.getDB = getDB;
 
 // Routes
 const authRoutes = require('./routes/auth.routes');
@@ -42,7 +67,8 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV
+    environment: process.env.NODE_ENV || 'development',
+    database: 'MongoDB'
   });
 });
 
@@ -50,6 +76,7 @@ app.get('/api/health', (req, res) => {
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack);
   res.status(err.status || 500).json({
+    success: false,
     message: err.message || 'Internal Server Error',
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
@@ -57,44 +84,40 @@ app.use((err, req, res, next) => {
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ message: 'Route not found' });
+  res.status(404).json({ 
+    success: false,
+    message: 'Route not found' 
+  });
 });
 
-// Database connection
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => {
-  console.log('✅ MongoDB connected');
-  createAdminUser();
-})
-.catch(err => {
-  console.error('❌ MongoDB connection error:', err);
-  process.exit(1);
-});
-
-const createAdminUser = async () => {
+// Create admin user
+async function createAdminUser() {
   try {
-    const User = require('./models/User.model');
-    const bcrypt = require('bcryptjs');
-
+    const db = getDB();
+    const usersCollection = db.collection('users');
+    
     const adminEmail = process.env.ADMIN_EMAIL || 'admin@recipehub.com';
     const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@123';
-
-    const existingAdmin = await User.findOne({ email: adminEmail });
+    
+    const bcrypt = require('bcryptjs');
+    
+    const existingAdmin = await usersCollection.findOne({ email: adminEmail });
+    
     if (!existingAdmin) {
       const hashedPassword = await bcrypt.hash(adminPassword, 10);
-      const admin = new User({
+      
+      await usersCollection.insertOne({
         name: 'Admin',
         email: adminEmail,
         password: hashedPassword,
+        image: 'https://ui-avatars.com/api/?name=Admin&background=random',
         role: 'admin',
-        isPremium: true,
         isBlocked: false,
-        image: 'https://ui-avatars.com/api/?name=Admin&background=random'
+        isPremium: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
       });
-      await admin.save();
+      
       console.log('✅ Admin user created successfully');
       console.log(`📧 Admin Email: ${adminEmail}`);
       console.log(`🔑 Admin Password: ${adminPassword}`);
@@ -104,10 +127,23 @@ const createAdminUser = async () => {
   } catch (error) {
     console.error('Error creating admin:', error);
   }
-};
+}
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+// Connect to MongoDB and start server
+connectToMongoDB().then(() => {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`\n🚀 Server running on http://localhost:${PORT}`);
+    console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`📡 API URL: http://localhost:${PORT}/api`);
+    console.log(`🔗 Health Check: http://localhost:${PORT}/api/health\n`);
+  });
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n🔄 Closing MongoDB connection...');
+  await client.close();
+  console.log('✅ MongoDB connection closed');
+  process.exit(0);
 });

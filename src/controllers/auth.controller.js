@@ -4,14 +4,13 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ userId }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '7d' });
 };
 
 const register = async (req, res) => {
   try {
     const { name, email, password, image } = req.body;
 
-    // Validate input
     if (!name || !email || !password) {
       return res.status(400).json({ 
         success: false,
@@ -19,7 +18,6 @@ const register = async (req, res) => {
       });
     }
 
-    // Check password strength
     if (password.length < 6) {
       return res.status(400).json({ 
         success: false,
@@ -27,7 +25,6 @@ const register = async (req, res) => {
       });
     }
 
-    // Check for uppercase and lowercase
     if (!/[A-Z]/.test(password) || !/[a-z]/.test(password)) {
       return res.status(400).json({ 
         success: false,
@@ -35,7 +32,6 @@ const register = async (req, res) => {
       });
     }
 
-    // Check if user exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
       return res.status(400).json({ 
@@ -44,34 +40,32 @@ const register = async (req, res) => {
       });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
-    const user = new User({
+    const user = await User.create({
       name,
       email: email.toLowerCase(),
       password: hashedPassword,
-      image: image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+      image: image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
+      role: 'user',
+      isPremium: false,
+      isBlocked: false
     });
 
-    await user.save();
+    const token = generateToken(user._id.toString());
 
-    // Generate token
-    const token = generateToken(user._id);
-
-    // Set cookie
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000
     });
 
+    const { password: _, ...userWithoutPassword } = user;
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
-      user: user.toJSON()
+      user: userWithoutPassword
     });
   } catch (error) {
     console.error('Register error:', error);
@@ -93,7 +87,6 @@ const login = async (req, res) => {
       });
     }
 
-    // Find user
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       return res.status(401).json({ 
@@ -102,7 +95,6 @@ const login = async (req, res) => {
       });
     }
 
-    // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(401).json({ 
@@ -111,7 +103,6 @@ const login = async (req, res) => {
       });
     }
 
-    // Check if blocked
     if (user.isBlocked) {
       return res.status(403).json({ 
         success: false,
@@ -119,10 +110,8 @@ const login = async (req, res) => {
       });
     }
 
-    // Generate token
-    const token = generateToken(user._id);
+    const token = generateToken(user._id.toString());
 
-    // Set cookie
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -130,10 +119,11 @@ const login = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
 
+    const { password: _, ...userWithoutPassword } = user;
     res.json({
       success: true,
       message: 'Login successful',
-      user: user.toJSON()
+      user: userWithoutPassword
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -158,15 +148,16 @@ const googleLogin = async (req, res) => {
     let user = await User.findOne({ email: email.toLowerCase() });
 
     if (!user) {
-      // Create new user
       const hashedPassword = await bcrypt.hash(Math.random().toString(36), 10);
-      user = new User({
+      user = await User.create({
         name: name || email.split('@')[0],
         email: email.toLowerCase(),
         password: hashedPassword,
-        image: image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || email)}&background=random`
+        image: image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || email)}&background=random`,
+        role: 'user',
+        isPremium: false,
+        isBlocked: false
       });
-      await user.save();
     }
 
     if (user.isBlocked) {
@@ -176,7 +167,7 @@ const googleLogin = async (req, res) => {
       });
     }
 
-    const token = generateToken(user._id);
+    const token = generateToken(user._id.toString());
 
     res.cookie('token', token, {
       httpOnly: true,
@@ -185,10 +176,11 @@ const googleLogin = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000
     });
 
+    const { password: _, ...userWithoutPassword } = user;
     res.json({
       success: true,
       message: 'Google login successful',
-      user: user.toJSON()
+      user: userWithoutPassword
     });
   } catch (error) {
     console.error('Google login error:', error);
@@ -209,9 +201,10 @@ const logout = async (req, res) => {
 
 const getMe = async (req, res) => {
   try {
+    const { password: _, ...userWithoutPassword } = req.user;
     res.json({
       success: true,
-      user: req.user.toJSON()
+      user: userWithoutPassword
     });
   } catch (error) {
     res.status(500).json({ 

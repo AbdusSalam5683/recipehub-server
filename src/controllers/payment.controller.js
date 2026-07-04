@@ -16,7 +16,7 @@ const createPremiumCheckout = async (req, res) => {
               name: 'RecipeHub Premium Membership',
               description: 'Unlimited recipes, premium badge, and exclusive features!',
             },
-            unit_amount: 999, // $9.99
+            unit_amount: 999,
           },
           quantity: 1,
         },
@@ -75,7 +75,7 @@ const createRecipePurchaseCheckout = async (req, res) => {
               name: recipe.recipeName,
               description: `Recipe by ${recipe.authorName}`,
             },
-            unit_amount: 499, // $4.99
+            unit_amount: 499,
           },
           quantity: 1,
         },
@@ -105,7 +105,6 @@ const createRecipePurchaseCheckout = async (req, res) => {
   }
 };
 
-// Webhook to handle successful payments
 const handleWebhook = async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
@@ -121,17 +120,14 @@ const handleWebhook = async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Handle the checkout.session.completed event
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const { userId, userEmail, recipeId, type } = session.metadata;
 
     try {
-      // Check if payment already exists
       const existingPayment = await Payment.findOne({ transactionId: session.id });
       if (!existingPayment) {
-        // Save payment record
-        const payment = new Payment({
+        await Payment.create({
           userId,
           userEmail,
           amount: session.amount_total / 100,
@@ -142,17 +138,8 @@ const handleWebhook = async (req, res) => {
           paidAt: new Date()
         });
 
-        await payment.save();
-
-        // Update user premium status if membership
         if (type === 'premium_membership') {
-          await User.findByIdAndUpdate(userId, { isPremium: true });
-        }
-
-        // If recipe purchase, you might want to track purchased recipes
-        if (type === 'recipe_purchase' && recipeId) {
-          // You can add purchased recipes to a separate collection if needed
-          console.log(`Recipe ${recipeId} purchased by user ${userId}`);
+          await User.updateById(userId, { isPremium: true });
         }
 
         console.log(`✅ Payment successful: ${session.id} for ${type}`);
@@ -180,12 +167,10 @@ const verifyPayment = async (req, res) => {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     
     if (session.payment_status === 'paid') {
-      // Check if payment already exists
       let payment = await Payment.findOne({ transactionId: sessionId });
       
       if (!payment) {
-        // Create payment record if not exists
-        payment = new Payment({
+        payment = await Payment.create({
           userId: req.user._id,
           userEmail: req.user.email,
           amount: session.amount_total / 100,
@@ -195,11 +180,9 @@ const verifyPayment = async (req, res) => {
           recipeId: session.metadata.recipeId || null,
           paidAt: new Date()
         });
-        await payment.save();
 
-        // Update user premium if membership
         if (session.metadata.type === 'premium_membership') {
-          await User.findByIdAndUpdate(req.user._id, { isPremium: true });
+          await User.updateById(req.user._id, { isPremium: true });
         }
       }
 
