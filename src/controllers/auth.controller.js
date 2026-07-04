@@ -7,19 +7,19 @@ const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '7d' });
 };
 
-// ✅ Production-Ready Cookie Options - Vercel এর জন্য Domain সহ
+// ✅ Production-Ready Cookie Options - Vercel
 const getCookieOptions = () => {
   const isProduction = process.env.NODE_ENV === 'production';
   
   return {
     httpOnly: true,
-    secure: true, // Production এ সবসময় true (HTTPS)
-    sameSite: 'none', // Cross-site request এর জন্য
+    secure: true, 
+    sameSite: 'none', 
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     path: '/',
-    domain: isProduction ? '.vercel.app' : undefined, // Vercel ডোমেইন
+    // domain: isProduction ? '.vercel.app' : undefined, 
   };
-};
+}; 
 
 const register = async (req, res) => {
   try {
