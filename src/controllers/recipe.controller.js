@@ -86,14 +86,17 @@ const getAllRecipes = async (req, res) => {
 
     let filter = { status: 'active' };
     
-    if (category && category !== 'All' && category !== 'all') {
+    // Category filter - সঠিকভাবে কাজ করবে
+    if (category && category !== 'All' && category !== 'all' && category !== '') {
       filter.category = category;
     }
+
+    console.log('🔍 Filter:', filter); // Debug log
 
     // Get total count
     const total = await Recipe.countDocuments(filter);
     
-    // Get paginated recipes
+    // Get recipes with filter
     const recipes = await Recipe.find(filter);
     
     // Sort and paginate manually
