@@ -139,4 +139,54 @@ const toggleFavorite = async (req, res) => {
       });
     }
 
-    const favorite
+    const favorite = new Favorite({
+      userId,
+      userEmail: req.user.email,
+      recipeId
+    });
+
+    await favorite.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Added to favorites',
+      isFavorite: true,
+      favorite
+    });
+  } catch (error) {
+    console.error('Toggle favorite error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
+  }
+};
+
+const checkFavorite = async (req, res) => {
+  try {
+    const favorite = await Favorite.findOne({
+      userId: req.user._id,
+      recipeId: req.params.recipeId
+    });
+
+    res.json({ 
+      success: true,
+      isFavorite: !!favorite 
+    });
+  } catch (error) {
+    console.error('Check favorite error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
+  }
+};
+
+module.exports = {
+  getProfile,
+  updateProfile,
+  getUserStats,
+  getFavorites,
+  toggleFavorite,
+  checkFavorite
+};
