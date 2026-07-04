@@ -7,15 +7,17 @@ const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '7d' });
 };
 
-// ✅ Production-Ready Cookie Options
+// ✅ Production-Ready Cookie Options - Vercel এর জন্য Domain সহ
 const getCookieOptions = () => {
   const isProduction = process.env.NODE_ENV === 'production';
+  
   return {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'none' : 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    secure: true, // Production এ সবসময় true (HTTPS)
+    sameSite: 'none', // Cross-site request এর জন্য
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     path: '/',
+    domain: isProduction ? '.vercel.app' : undefined, // Vercel ডোমেইন
   };
 };
 
@@ -54,7 +56,6 @@ const register = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Image processing - imgBB upload if provided
     let imageUrl = image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
     
     if (image && image.startsWith('data:image')) {
@@ -219,9 +220,10 @@ const googleLogin = async (req, res) => {
 const logout = async (req, res) => {
   res.clearCookie('token', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: true,
+    sameSite: 'none',
     path: '/',
+    domain: process.env.NODE_ENV === 'production' ? '.vercel.app' : undefined,
   });
   res.json({ 
     success: true,
