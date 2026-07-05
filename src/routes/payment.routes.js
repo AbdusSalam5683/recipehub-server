@@ -6,7 +6,8 @@ const {
   createPremiumCheckout,
   createRecipePurchaseCheckout,
   handleWebhook,
-  verifyPayment
+  verifyPayment,
+  getPurchasedRecipes
 } = require('../controllers/payment.controller');
 
 // Webhook (no auth - needs raw body)
@@ -17,5 +18,6 @@ router.use(verifyToken);
 router.post('/create-premium-checkout', createPremiumCheckout);
 router.post('/create-recipe-checkout', createRecipePurchaseCheckout);
 router.get('/verify', verifyPayment);
+router.get('/purchased', getPurchasedRecipes);
 
 module.exports = router;

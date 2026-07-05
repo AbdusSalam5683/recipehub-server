@@ -206,9 +206,51 @@ const verifyPayment = async (req, res) => {
   }
 };
 
+// ✅ Get user's purchased recipes
+const getPurchasedRecipes = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    const payments = await Payment.find({ 
+      userId: userId,
+      paymentType: 'recipe_purchase',
+      paymentStatus: 'success'
+    }).sort({ paidAt: -1 });
+
+    const purchasedRecipes = [];
+    for (const payment of payments) {
+      if (payment.recipeId) {
+        const recipe = await Recipe.findById(payment.recipeId)
+          .populate('authorId', 'name email image');
+        if (recipe && recipe.status !== 'deleted') {
+          purchasedRecipes.push({
+            _id: payment._id,
+            recipeId: recipe,
+            purchasedAt: payment.paidAt,
+            amount: payment.amount,
+            transactionId: payment.transactionId,
+          });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      purchases: purchasedRecipes,
+    });
+  } catch (error) {
+    console.error('Get purchased recipes error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   createPremiumCheckout,
   createRecipePurchaseCheckout,
   handleWebhook,
-  verifyPayment
+  verifyPayment,
+  getPurchasedRecipes,
 };

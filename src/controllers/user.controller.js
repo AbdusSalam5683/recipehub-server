@@ -55,18 +55,18 @@ const updateProfile = async (req, res) => {
 
 const getUserStats = async (req, res) => {
   try {
-    const totalRecipes = await Recipe.countDocuments({ 
-      authorId: req.user._id,
-      status: 'active'
-    });
-    
-    const totalFavorites = await Favorite.countDocuments({ 
-      userId: req.user._id 
-    });
-    
-    const totalLikesResult = await Recipe.aggregate([
-      { $match: { authorId: req.user._id, status: 'active' } },
-      { $group: { _id: null, total: { $sum: '$likesCount' } } }
+    const [totalRecipes, totalFavorites, totalLikesResult] = await Promise.all([
+      Recipe.countDocuments({ 
+        authorId: req.user._id,
+        status: 'active'
+      }),
+      Favorite.countDocuments({ 
+        userId: req.user._id 
+      }),
+      Recipe.aggregate([
+        { $match: { authorId: req.user._id, status: 'active' } },
+        { $group: { _id: null, total: { $sum: '$likesCount' } } }
+      ])
     ]);
 
     res.json({
