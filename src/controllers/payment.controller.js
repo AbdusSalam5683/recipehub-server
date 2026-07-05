@@ -164,12 +164,16 @@ const verifyPayment = async (req, res) => {
       });
     }
 
+    console.log('🔍 Verifying payment for session:', sessionId);
+
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     
     if (session.payment_status === 'paid') {
+      // ✅ Check if payment already exists
       let payment = await Payment.findOne({ transactionId: sessionId });
       
       if (!payment) {
+        // ✅ Create new payment with proper ID
         payment = await Payment.create({
           userId: req.user._id,
           userEmail: req.user.email,
@@ -181,8 +185,10 @@ const verifyPayment = async (req, res) => {
           paidAt: new Date()
         });
 
+        // ✅ Update user premium status
         if (session.metadata.type === 'premium_membership') {
           await User.updateById(req.user._id, { isPremium: true });
+          console.log('✅ User upgraded to premium:', req.user.email);
         }
       }
 
@@ -211,21 +217,38 @@ const getPurchasedRecipes = async (req, res) => {
   try {
     const userId = req.user._id;
     
+    console.log('📝 Fetching purchased recipes for user:', userId);
+    
     const payments = await Payment.find({ 
       userId: userId,
       paymentType: 'recipe_purchase',
       paymentStatus: 'success'
-    }).sort({ paidAt: -1 });
+    });
+
+    // ✅ JavaScript sort ব্যবহার করুন
+    const sortedPayments = payments.sort((a, b) => {
+      return new Date(b.paidAt) - new Date(a.paidAt);
+    });
+
+    console.log('📊 Found payments:', sortedPayments.length);
 
     const purchasedRecipes = [];
-    for (const payment of payments) {
+    for (const payment of sortedPayments) {
       if (payment.recipeId) {
-        const recipe = await Recipe.findById(payment.recipeId)
-          .populate('authorId', 'name email image');
+        const recipe = await Recipe.findById(payment.recipeId);
         if (recipe && recipe.status !== 'deleted') {
+          const author = await User.findById(recipe.authorId);
           purchasedRecipes.push({
             _id: payment._id,
-            recipeId: recipe,
+            recipeId: {
+              ...recipe,
+              authorId: author ? { 
+                _id: author._id,
+                name: author.name,
+                email: author.email,
+                image: author.image 
+              } : null
+            },
             purchasedAt: payment.paidAt,
             amount: payment.amount,
             transactionId: payment.transactionId,

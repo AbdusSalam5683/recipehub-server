@@ -34,17 +34,24 @@ const Recipe = {
   findById: async (id) => {
     const collection = getCollection();
     try {
+      // ✅ যদি id সংখ্যা হয় (1, 2, 3...)
       if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
         const numericId = typeof id === 'string' ? parseInt(id) : id;
         return await collection.findOne({ _id: numericId });
       }
-      const objectId = typeof id === 'string' ? new ObjectId(id) : id;
-      return await collection.findOne({ _id: objectId });
+      // ✅ যদি id ObjectId স্ট্রিং হয় (24 character hex)
+      if (typeof id === 'string' && id.length === 24) {
+        const objectId = new ObjectId(id);
+        return await collection.findOne({ _id: objectId });
+      }
+      // ✅ যদি id ইতিমধ্যে ObjectId হয়
+      if (id instanceof ObjectId) {
+        return await collection.findOne({ _id: id });
+      }
+      console.warn('⚠️ Invalid ID format:', id);
+      return null;
     } catch (error) {
       console.error('FindById error:', error);
-      if (typeof id === 'string' && /^\d+$/.test(id)) {
-        return await collection.findOne({ _id: parseInt(id) });
-      }
       return null;
     }
   },
@@ -80,9 +87,13 @@ const Recipe = {
       if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
         const numericId = typeof id === 'string' ? parseInt(id) : id;
         query = { _id: numericId };
+      } else if (typeof id === 'string' && id.length === 24) {
+        query = { _id: new ObjectId(id) };
+      } else if (id instanceof ObjectId) {
+        query = { _id: id };
       } else {
-        const objectId = typeof id === 'string' ? new ObjectId(id) : id;
-        query = { _id: objectId };
+        console.warn('⚠️ Invalid ID format for update:', id);
+        return null;
       }
       const result = await collection.updateOne(query, {
         $set: { ...update, updatedAt: new Date() }
@@ -101,9 +112,13 @@ const Recipe = {
       if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
         const numericId = typeof id === 'string' ? parseInt(id) : id;
         query = { _id: numericId };
+      } else if (typeof id === 'string' && id.length === 24) {
+        query = { _id: new ObjectId(id) };
+      } else if (id instanceof ObjectId) {
+        query = { _id: id };
       } else {
-        const objectId = typeof id === 'string' ? new ObjectId(id) : id;
-        query = { _id: objectId };
+        console.warn('⚠️ Invalid ID format for delete:', id);
+        return null;
       }
       return await collection.deleteOne(query);
     } catch (error) {

@@ -86,25 +86,19 @@ const getAllRecipes = async (req, res) => {
 
     let filter = { status: 'active' };
     
-    // Category filter - সঠিকভাবে কাজ করবে
     if (category && category !== 'All' && category !== 'all' && category !== '') {
       filter.category = category;
     }
 
-    console.log('🔍 Filter:', filter); // Debug log
+    console.log('🔍 Filter:', filter);
 
-    // Get total count
     const total = await Recipe.countDocuments(filter);
-    
-    // Get recipes with filter
     const recipes = await Recipe.find(filter);
     
-    // Sort and paginate manually
     const sortedRecipes = recipes
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .slice(skip, skip + limit);
 
-    // Populate authors
     const populatedRecipes = [];
     for (const recipe of sortedRecipes) {
       try {
@@ -155,7 +149,6 @@ const getFeaturedRecipes = async (req, res) => {
       status: 'active' 
     });
 
-    // Populate authors
     const populatedRecipes = [];
     for (const recipe of recipes) {
       try {
@@ -182,7 +175,7 @@ const getFeaturedRecipes = async (req, res) => {
 
     res.json({
       success: true,
-      recipes: populatedRecipes.slice(0, 3) // Limit to 3 featured recipes  
+      recipes: populatedRecipes.slice(0, 3)
     });
   } catch (error) {
     console.error('Get featured recipes error:', error);
@@ -197,12 +190,10 @@ const getPopularRecipes = async (req, res) => {
   try {
     const recipes = await Recipe.find({ status: 'active' });
     
-    // Sort by likesCount
     const sortedRecipes = recipes
       .sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0))
       .slice(0, 3);
 
-    // Populate authors
     const populatedRecipes = [];
     for (const recipe of sortedRecipes) {
       try {
@@ -474,12 +465,16 @@ const reportRecipe = async (req, res) => {
 
 const getMyRecipes = async (req, res) => {
   try {
+    const userId = req.user._id;
+    console.log('📝 Fetching recipes for user:', userId);
+    
     const recipes = await Recipe.find({ 
-      authorId: req.user._id,
+      authorId: userId,
       status: { $ne: 'deleted' }
     });
 
-    // Populate author
+    console.log('📊 Found recipes:', recipes.length);
+
     const populatedRecipes = [];
     for (const recipe of recipes) {
       try {
@@ -497,6 +492,7 @@ const getMyRecipes = async (req, res) => {
           });
         }
       } catch (err) {
+        console.error('Error populating author:', err);
         populatedRecipes.push({
           ...recipe,
           authorId: null
@@ -504,6 +500,7 @@ const getMyRecipes = async (req, res) => {
       }
     }
 
+    // ✅ সবসময় success: true এবং recipes array রিটার্ন করুন
     res.json({
       success: true,
       recipes: populatedRecipes

@@ -14,16 +14,16 @@ const {
   getMyRecipes
 } = require('../controllers/recipe.controller');
 
-// Public routes
+// ✅ Public routes (No auth required)
 router.get('/', getAllRecipes);
 router.get('/featured', getFeaturedRecipes);
 router.get('/popular', getPopularRecipes);
-router.get('/:id', getRecipeById);
 
-// Protected routes
+// ✅ Protected routes (Auth required)
 router.use(verifyToken);
 router.post('/', createRecipe);
-router.get('/my-recipes', getMyRecipes);
+router.get('/my-recipes', getMyRecipes);  
+router.get('/:id', getRecipeById);        
 router.put('/:id', updateRecipe);
 router.delete('/:id', deleteRecipe);
 router.post('/:id/like', toggleLike);
