@@ -55,7 +55,7 @@ const updateProfile = async (req, res) => {
 
 const getUserStats = async (req, res) => {
   try {
-    const [totalRecipes, totalFavorites, totalLikesResult] = await Promise.all([
+    const [totalRecipes, totalFavorites, totalLikesResult, totalViewsResult] = await Promise.all([
       Recipe.countDocuments({ 
         authorId: req.user._id,
         status: 'active'
@@ -66,6 +66,10 @@ const getUserStats = async (req, res) => {
       Recipe.aggregate([
         { $match: { authorId: req.user._id, status: 'active' } },
         { $group: { _id: null, total: { $sum: '$likesCount' } } }
+      ]),
+      Recipe.aggregate([
+        { $match: { authorId: req.user._id, status: 'active' } },
+        { $group: { _id: null, total: { $sum: '$viewsCount' } } }
       ])
     ]);
 
@@ -75,6 +79,7 @@ const getUserStats = async (req, res) => {
         totalRecipes,
         totalFavorites,
         totalLikesReceived: totalLikesResult[0]?.total || 0,
+        totalViews: totalViewsResult[0]?.total || 0,
         isPremium: req.user.isPremium,
         isBlocked: req.user.isBlocked,
         role: req.user.role

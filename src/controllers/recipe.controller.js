@@ -233,7 +233,17 @@ const getPopularRecipes = async (req, res) => {
 
 const getRecipeById = async (req, res) => {
   try {
-    const recipe = await Recipe.findById(req.params.id);
+    const recipeId = req.params.id;
+    
+    // ✅ Validate ID
+    if (!recipeId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Recipe ID is required'
+      });
+    }
+
+    const recipe = await Recipe.findById(recipeId);
     
     if (!recipe) {
       return res.status(404).json({ 
@@ -249,6 +259,11 @@ const getRecipeById = async (req, res) => {
       });
     }
 
+    // ✅ Increment views count (asynchronously)
+    Recipe.incrementViews(recipeId)
+      .then(() => console.log(`📊 Views incremented for recipe ${recipeId}`))
+      .catch(err => console.error('View increment error:', err));
+
     let author = null;
     try {
       author = await User.findById(recipe.authorId);
@@ -262,7 +277,8 @@ const getRecipeById = async (req, res) => {
 
     const recipeWithAuthor = {
       ...recipe,
-      authorId: author
+      authorId: author,
+      viewsCount: recipe.viewsCount || 0
     };
 
     res.json({
@@ -270,7 +286,7 @@ const getRecipeById = async (req, res) => {
       recipe: recipeWithAuthor
     });
   } catch (error) {
-    console.error('Get recipe error:', error);
+    console.error('❌ Get recipe error:', error);
     res.status(500).json({ 
       success: false,
       message: error.message 
@@ -500,7 +516,6 @@ const getMyRecipes = async (req, res) => {
       }
     }
 
-    // ✅ সবসময় success: true এবং recipes array রিটার্ন করুন
     res.json({
       success: true,
       recipes: populatedRecipes

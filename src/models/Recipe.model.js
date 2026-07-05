@@ -6,20 +6,6 @@ const getCollection = () => {
   return db.collection('recipes');
 };
 
-// Get next auto-increment ID for recipes
-const getNextId = async () => {
-  const collection = getCollection();
-  const lastRecipe = await collection.find().sort({ _id: -1 }).limit(1).toArray();
-  if (lastRecipe.length === 0) {
-    return 1;
-  }
-  if (typeof lastRecipe[0]._id === 'number') {
-    return lastRecipe[0]._id + 1;
-  }
-  const count = await collection.countDocuments();
-  return count + 1;
-};
-
 const Recipe = {
   find: async (filter = {}) => {
     const collection = getCollection();
@@ -34,17 +20,14 @@ const Recipe = {
   findById: async (id) => {
     const collection = getCollection();
     try {
-      // ✅ যদি id সংখ্যা হয় (1, 2, 3...)
       if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
         const numericId = typeof id === 'string' ? parseInt(id) : id;
         return await collection.findOne({ _id: numericId });
       }
-      // ✅ যদি id ObjectId স্ট্রিং হয় (24 character hex)
       if (typeof id === 'string' && id.length === 24) {
         const objectId = new ObjectId(id);
         return await collection.findOne({ _id: objectId });
       }
-      // ✅ যদি id ইতিমধ্যে ObjectId হয়
       if (id instanceof ObjectId) {
         return await collection.findOne({ _id: id });
       }
@@ -58,12 +41,14 @@ const Recipe = {
   
   create: async (data) => {
     const collection = getCollection();
-    const nextId = await getNextId();
+    const lastRecipe = await collection.find().sort({ _id: -1 }).limit(1).toArray();
+    const nextId = lastRecipe.length > 0 ? lastRecipe[0]._id + 1 : 1;
     
     const result = await collection.insertOne({
       _id: nextId,
       ...data,
       likesCount: 0,
+      viewsCount: 0,
       isFeatured: false,
       status: 'active',
       createdAt: new Date(),
@@ -135,6 +120,32 @@ const Recipe = {
   aggregate: async (pipeline) => {
     const collection = getCollection();
     return await collection.aggregate(pipeline).toArray();
+  },
+  
+  // ✅ Increment views count
+  incrementViews: async (id) => {
+    const collection = getCollection();
+    try {
+      let query = {};
+      if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
+        const numericId = typeof id === 'string' ? parseInt(id) : id;
+        query = { _id: numericId };
+      } else if (typeof id === 'string' && id.length === 24) {
+        query = { _id: new ObjectId(id) };
+      } else if (id instanceof ObjectId) {
+        query = { _id: id };
+      } else {
+        console.warn('⚠️ Invalid ID format for views increment:', id);
+        return null;
+      }
+      const result = await collection.updateOne(query, {
+        $inc: { viewsCount: 1 }
+      });
+      return result;
+    } catch (error) {
+      console.error('Increment views error:', error);
+      return null;
+    }
   }
 };
 
