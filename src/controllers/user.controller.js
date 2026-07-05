@@ -93,7 +93,6 @@ const getFavorites = async (req, res) => {
   try {
     const favorites = await Favorite.find({ userId: req.user._id });
     
-    // Populate recipe details
     const populatedFavorites = [];
     for (const fav of favorites) {
       const recipe = await Recipe.findById(fav.recipeId);

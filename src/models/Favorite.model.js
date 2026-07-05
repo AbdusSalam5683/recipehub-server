@@ -6,6 +6,20 @@ const getCollection = () => {
   return db.collection('favorites');
 };
 
+// ✅ Get next auto-increment ID
+const getNextId = async () => {
+  const collection = getCollection();
+  const lastItem = await collection.find().sort({ _id: -1 }).limit(1).toArray();
+  if (lastItem.length === 0) {
+    return 1;
+  }
+  if (typeof lastItem[0]._id === 'number') {
+    return lastItem[0]._id + 1;
+  }
+  const count = await collection.countDocuments();
+  return count + 1;
+};
+
 const Favorite = {
   find: async (filter = {}) => {
     const collection = getCollection();
@@ -24,17 +38,24 @@ const Favorite = {
         const numericId = typeof id === 'string' ? parseInt(id) : id;
         return await collection.findOne({ _id: numericId });
       }
-      const objectId = typeof id === 'string' ? new ObjectId(id) : id;
-      return await collection.findOne({ _id: objectId });
+      if (typeof id === 'string' && id.length === 24) {
+        const objectId = new ObjectId(id);
+        return await collection.findOne({ _id: objectId });
+      }
+      if (id instanceof ObjectId) {
+        return await collection.findOne({ _id: id });
+      }
+      return null;
     } catch (error) {
+      console.error('FindById error:', error);
       return null;
     }
   },
   
+  // ✅ Fixed create method with auto-increment ID
   create: async (data) => {
     const collection = getCollection();
-    const lastItem = await collection.find().sort({ _id: -1 }).limit(1).toArray();
-    const nextId = lastItem.length > 0 ? lastItem[0]._id + 1 : 1;
+    const nextId = await getNextId();
     
     const result = await collection.insertOne({
       _id: nextId,
@@ -56,12 +77,16 @@ const Favorite = {
       if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
         const numericId = typeof id === 'string' ? parseInt(id) : id;
         query = { _id: numericId };
+      } else if (typeof id === 'string' && id.length === 24) {
+        query = { _id: new ObjectId(id) };
+      } else if (id instanceof ObjectId) {
+        query = { _id: id };
       } else {
-        const objectId = typeof id === 'string' ? new ObjectId(id) : id;
-        query = { _id: objectId };
+        return null;
       }
       return await collection.deleteOne(query);
     } catch (error) {
+      console.error('DeleteById error:', error);
       return null;
     }
   },
