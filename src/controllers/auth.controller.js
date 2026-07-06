@@ -231,7 +231,8 @@ const googleLogin = async (req, res) => {
     res.json({
       success: true,
       message: 'Google login successful',
-      user: userWithoutPassword
+      user: userWithoutPassword,
+      token: token,
     });
   } catch (error) {
     console.error('Google login error:', error);
