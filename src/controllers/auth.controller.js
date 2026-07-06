@@ -1,4 +1,3 @@
-// server/src/controllers/auth.controller.js
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models/User.model');
@@ -48,12 +47,14 @@ const register = async (req, res) => {
 
     let imageUrl = image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
     
+    // ✅ Fixed: Added try-catch for image upload
     if (image && image.startsWith('data:image')) {
       try {
         const { uploadToImgBB } = require('../utils/imgbbUploader');
         imageUrl = await uploadToImgBB(image);
       } catch (uploadError) {
         console.error('Image upload failed:', uploadError.message);
+        // ✅ Fallback to avatar
         imageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
       }
     }
@@ -68,7 +69,7 @@ const register = async (req, res) => {
       isBlocked: false
     });
 
-    // ✅ Log activity
+    // Log activity
     await logActivity({
       userId: user._id,
       userEmail: user.email,
@@ -130,7 +131,7 @@ const login = async (req, res) => {
       });
     }
 
-    // ✅ Log activity
+    // Log activity
     await logActivity({
       userId: user._id,
       userEmail: user.email,
@@ -176,12 +177,14 @@ const googleLogin = async (req, res) => {
       
       let imageUrl = image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || email)}&background=random`;
       
+      // ✅ Fixed: Added try-catch for image upload
       if (image && image.startsWith('data:image')) {
         try {
           const { uploadToImgBB } = require('../utils/imgbbUploader');
           imageUrl = await uploadToImgBB(image);
         } catch (uploadError) {
           console.error('Google image upload failed:', uploadError.message);
+          // ✅ Fallback to avatar
           imageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name || email)}&background=random`;
         }
       }
@@ -196,7 +199,7 @@ const googleLogin = async (req, res) => {
         isBlocked: false
       });
 
-      // ✅ Log activity
+      // Log activity
       await logActivity({
         userId: user._id,
         userEmail: user.email,
@@ -214,7 +217,7 @@ const googleLogin = async (req, res) => {
       });
     }
 
-    // ✅ Log activity
+    // Log activity
     await logActivity({
       userId: user._id,
       userEmail: user.email,

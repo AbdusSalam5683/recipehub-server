@@ -1,4 +1,3 @@
-// server/src/index.js
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -19,17 +18,18 @@ dotenv.config();
 
 const app = express();
 
-// ✅ Production-Ready CORS Configuration
+// ✅ Fixed: Production-Ready CORS Configuration with fallback
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5000',
   'https://recipehub-client-six.vercel.app',
   'https://recipehub-server-psi.vercel.app',
-  process.env.CLIENT_URL
+  process.env.CLIENT_URL || 'https://recipehub-client-six.vercel.app'
 ].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
@@ -148,6 +148,21 @@ async function connectToMongoDB() {
   }
 }
 
+// ✅ Added: Database reconnection logic
+client.on('error', async (err) => {
+  console.error('❌ MongoDB error:', err);
+  console.log('🔄 Attempting to reconnect...');
+  setTimeout(async () => {
+    try {
+      await client.connect();
+      db = client.db();
+      console.log('✅ MongoDB reconnected successfully!');
+    } catch (e) {
+      console.error('❌ Failed to reconnect to MongoDB:', e);
+    }
+  }, 5000);
+});
+
 function getDB() {
   return db;
 }
@@ -186,8 +201,32 @@ app.use((req, res) => {
   });
 });
 
+// ✅ Fixed: Better error handler
 app.use((err, req, res, next) => {
-  console.error('Error:', err.stack);
+  console.error('❌ Error:', err.stack);
+  
+  // Handle specific errors
+  if (err.name === 'JsonWebTokenError') {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid token'
+    });
+  }
+  
+  if (err.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      success: false,
+      message: 'Token expired'
+    });
+  }
+  
+  if (err.name === 'CastError') {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid ID format'
+    });
+  }
+  
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal Server Error',
@@ -257,4 +296,13 @@ process.on('SIGINT', async () => {
   await client.close();
   console.log('✅ MongoDB connection closed');
   process.exit(0);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
 });

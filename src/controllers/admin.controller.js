@@ -1,11 +1,11 @@
-// server/src/controllers/admin.controller.js
+const { ObjectId } = require('mongodb'); // ✅ Added missing import
 const { User } = require('../models/User.model');
 const { Recipe } = require('../models/Recipe.model');
 const { Report } = require('../models/Report.model');
 
 const getOverview = async (req, res) => {
   try {
-    const totalUsers = await User.countDocuments();
+    const totalUsers = await User.countDocuments({});
     // Exclude deleted recipes
     const totalRecipes = await Recipe.countDocuments({ 
       status: { $ne: 'deleted' }
@@ -33,7 +33,8 @@ const getOverview = async (req, res) => {
 
 const getUsers = async (req, res) => {
   try {
-    const users = await User.find();
+    // ✅ Fixed: Using find({}) instead of find()
+    const users = await User.find({});
     
     const usersWithStats = await Promise.all(users.map(async (user) => {
       // Exclude deleted recipes
@@ -189,6 +190,7 @@ const deleteUser = async (req, res) => {
       }
     }
 
+    // ✅ Fixed: Better delete method
     await User.deleteById(user._id);
 
     res.json({

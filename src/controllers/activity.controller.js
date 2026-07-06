@@ -1,4 +1,4 @@
-// server/src/controllers/activity.controller.js
+const { ObjectId } = require('mongodb'); // ✅ Added missing import
 const { Activity } = require('../models/Activity.model');
 const { User } = require('../models/User.model');
 
@@ -16,10 +16,11 @@ const getActivities = async (req, res) => {
 
     // Filter by user
     if (req.query.userId) {
-      filter.userId = new ObjectId(req.query.userId);
+      filter.userId = new ObjectId(req.query.userId); // ✅ Now works
     }
 
-    const result = await Activity.findAll(filter, page, limit);
+    // ✅ Fixed: Using find() instead of findAll()
+    const result = await Activity.find(filter, page, limit);
 
     // Populate user info for each activity
     const populatedActivities = [];
@@ -102,7 +103,7 @@ const getActivityStats = async (req, res) => {
     });
 
     // Get action type breakdown
-    const actions = await Activity.findAll({}, 1, 1000);
+    const actions = await Activity.find({}, 1, 1000);
     const actionCount = {};
     actions.activities.forEach(a => {
       actionCount[a.action] = (actionCount[a.action] || 0) + 1;

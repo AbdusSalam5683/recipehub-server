@@ -1,4 +1,3 @@
-// server/src/controllers/recipe.controller.js
 const { Recipe } = require('../models/Recipe.model');
 const { User } = require('../models/User.model');
 const Report = require('../models/Report.model');
@@ -43,8 +42,14 @@ const createRecipe = async (req, res) => {
     }
 
     let imageUrl = recipeImage;
+    // ✅ Fixed: Added try-catch for image upload
     if (recipeImage && recipeImage.startsWith('data:image')) {
-      imageUrl = await uploadToImgBB(recipeImage);
+      try {
+        imageUrl = await uploadToImgBB(recipeImage);
+      } catch (uploadError) {
+        console.error('Recipe image upload failed:', uploadError.message);
+        imageUrl = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500';
+      }
     }
 
     const ingredientsArray = Array.isArray(ingredients) 
@@ -337,8 +342,14 @@ const updateRecipe = async (req, res) => {
       }
     });
 
+    // ✅ Fixed: Added try-catch for image upload
     if (updates.recipeImage && updates.recipeImage.startsWith('data:image')) {
-      updateData.recipeImage = await uploadToImgBB(updates.recipeImage);
+      try {
+        updateData.recipeImage = await uploadToImgBB(updates.recipeImage);
+      } catch (uploadError) {
+        console.error('Recipe image update failed:', uploadError.message);
+        updateData.recipeImage = updates.recipeImage || recipe.recipeImage;
+      }
     } else if (updates.recipeImage) {
       updateData.recipeImage = updates.recipeImage;
     }

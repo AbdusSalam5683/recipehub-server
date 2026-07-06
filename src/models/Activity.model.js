@@ -1,4 +1,3 @@
-// server/src/models/Activity.model.js
 const { ObjectId } = require('mongodb');
 
 let dbInstance;
@@ -25,8 +24,8 @@ const Activity = {
     return await collection.findOne({ _id: result.insertedId });
   },
 
-  // Get all activities with pagination
-  findAll: async (filter = {}, page = 1, limit = 20) => {
+  // ✅ Fixed: Renamed from findAll() to find()
+  find: async (filter = {}, page = 1, limit = 20) => {
     const collection = getCollection();
     const skip = (page - 1) * limit;
     
