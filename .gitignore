@@ -1,5 +1,6 @@
 # dependencies
 /node_modules
+/OldTest
 /.pnp
 .pnp.js
 .yarn/install-state.gz
