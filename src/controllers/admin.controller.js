@@ -6,7 +6,10 @@ const { Report } = require('../models/Report.model');
 const getOverview = async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
-    const totalRecipes = await Recipe.countDocuments({ status: 'active' });
+    // ✅ deleted বাদ দিন
+    const totalRecipes = await Recipe.countDocuments({ 
+      status: { $ne: 'deleted' }
+    });
     const totalPremium = await User.countDocuments({ isPremium: true });
     const totalReports = await Report.countDocuments({ status: 'pending' });
 
@@ -33,6 +36,7 @@ const getUsers = async (req, res) => {
     const users = await User.find();
     
     const usersWithStats = await Promise.all(users.map(async (user) => {
+      // ✅ deleted বাদ দিন
       const recipeCount = await Recipe.countDocuments({ 
         authorId: user._id,
         status: { $ne: 'deleted' }
@@ -200,9 +204,13 @@ const deleteUser = async (req, res) => {
   }
 };
 
+// ✅ getAllRecipesAdmin - শুধু active এবং reported দেখান (deleted বাদ)
 const getAllRecipesAdmin = async (req, res) => {
   try {
-    const recipes = await Recipe.find();
+    // ✅ deleted বাদ দিন
+    const recipes = await Recipe.find({ 
+      status: { $ne: 'deleted' }
+    });
     
     const populatedRecipes = [];
     for (const recipe of recipes) {
@@ -333,7 +341,7 @@ const handleReport = async (req, res) => {
   }
 };
 
-// ✅ Report Stats (নতুন যোগ)
+// ✅ Report Stats
 const getReportStats = async (req, res) => {
   try {
     const total = await Report.countDocuments({});
@@ -369,5 +377,5 @@ module.exports = {
   toggleFeatureRecipe,
   getReports,
   handleReport,
-  getReportStats  // ✅ নতুন যোগ
+  getReportStats
 };

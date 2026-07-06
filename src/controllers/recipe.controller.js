@@ -504,25 +504,21 @@ const reportRecipe = async (req, res) => {
 };
 
 // ============================================
-// 📌 GET MY RECIPES (FIXED)
+// 📌 GET MY RECIPES
 // ============================================
 const getMyRecipes = async (req, res) => {
   try {
     const userId = req.user._id;
     console.log('📝 Fetching recipes for user:', userId);
     
-    // ✅ ডিরেক্ট MongoDB collection ব্যবহার
     const db = global.getDB();
     const collection = db.collection('recipes');
     
-    // ✅ সব রেসিপি দেখুন (ডিবাগিং এর জন্য)
-    const allRecipes = await collection.find({}).toArray();
-    console.log('📊 Total recipes in DB:', allRecipes.length);
-    
-    // ✅ ইউজারের রেসিপি খুঁজুন
+    // ✅ শুধু active এবং reported (deleted বাদ)
     const recipes = await collection
       .find({ 
-        authorId: userId
+        authorId: userId,
+        status: { $ne: 'deleted' }
       })
       .sort({ createdAt: -1 })
       .toArray();
