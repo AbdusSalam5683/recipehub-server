@@ -6,7 +6,7 @@ const { uploadToImgBB } = require('../utils/imgbbUploader');
 const { ObjectId } = require('mongodb');
 
 // ============================================
-// 📌 CREATE RECIPE
+// CREATE RECIPE
 // ============================================
 const createRecipe = async (req, res) => {
   try {
@@ -80,7 +80,7 @@ const createRecipe = async (req, res) => {
 };
 
 // ============================================
-// 📌 GET ALL RECIPES
+// GET ALL RECIPES
 // ============================================
 const getAllRecipes = async (req, res) => {
   try {
@@ -95,7 +95,7 @@ const getAllRecipes = async (req, res) => {
       filter.category = category;
     }
 
-    console.log('🔍 Filter:', filter);
+    console.log('Filter:', filter);
 
     const total = await Recipe.countDocuments(filter);
     const recipes = await Recipe.find(filter);
@@ -148,7 +148,7 @@ const getAllRecipes = async (req, res) => {
 };
 
 // ============================================
-// 📌 GET FEATURED RECIPES
+// GET FEATURED RECIPES
 // ============================================
 const getFeaturedRecipes = async (req, res) => {
   try {
@@ -195,7 +195,7 @@ const getFeaturedRecipes = async (req, res) => {
 };
 
 // ============================================
-// 📌 GET POPULAR RECIPES
+// GET POPULAR RECIPES
 // ============================================
 const getPopularRecipes = async (req, res) => {
   try {
@@ -243,7 +243,7 @@ const getPopularRecipes = async (req, res) => {
 };
 
 // ============================================
-// 📌 GET RECIPE BY ID
+// GET RECIPE BY ID
 // ============================================
 const getRecipeById = async (req, res) => {
   try {
@@ -273,7 +273,7 @@ const getRecipeById = async (req, res) => {
     }
 
     Recipe.incrementViews(recipeId)
-      .then(() => console.log(`📊 Views incremented for recipe ${recipeId}`))
+      .then(() => console.log(`Views incremented for recipe ${recipeId}`))
       .catch(err => console.error('View increment error:', err));
 
     let author = null;
@@ -298,7 +298,7 @@ const getRecipeById = async (req, res) => {
       recipe: recipeWithAuthor
     });
   } catch (error) {
-    console.error('❌ Get recipe error:', error);
+    console.error('Get recipe error:', error);
     res.status(500).json({ 
       success: false,
       message: error.message 
@@ -307,7 +307,7 @@ const getRecipeById = async (req, res) => {
 };
 
 // ============================================
-// 📌 UPDATE RECIPE
+// UPDATE RECIPE
 // ============================================
 const updateRecipe = async (req, res) => {
   try {
@@ -369,7 +369,7 @@ const updateRecipe = async (req, res) => {
 };
 
 // ============================================
-// 📌 DELETE RECIPE
+// DELETE RECIPE
 // ============================================
 const deleteRecipe = async (req, res) => {
   try {
@@ -405,7 +405,7 @@ const deleteRecipe = async (req, res) => {
 };
 
 // ============================================
-// 📌 TOGGLE LIKE
+// TOGGLE LIKE
 // ============================================
 const toggleLike = async (req, res) => {
   try {
@@ -445,7 +445,7 @@ const toggleLike = async (req, res) => {
 };
 
 // ============================================
-// 📌 REPORT RECIPE
+// REPORT RECIPE
 // ============================================
 const reportRecipe = async (req, res) => {
   try {
@@ -504,17 +504,17 @@ const reportRecipe = async (req, res) => {
 };
 
 // ============================================
-// 📌 GET MY RECIPES
+// GET MY RECIPES
 // ============================================
 const getMyRecipes = async (req, res) => {
   try {
     const userId = req.user._id;
-    console.log('📝 Fetching recipes for user:', userId);
+    console.log('Fetching recipes for user:', userId);
     
     const db = global.getDB();
     const collection = db.collection('recipes');
     
-    // ✅ শুধু active এবং reported (deleted বাদ)
+    // Only show active and reported (exclude deleted)
     const recipes = await collection
       .find({ 
         authorId: userId,
@@ -523,7 +523,7 @@ const getMyRecipes = async (req, res) => {
       .sort({ createdAt: -1 })
       .toArray();
 
-    console.log('📊 Found recipes for user:', recipes.length);
+    console.log('Found recipes for user:', recipes.length);
 
     const populatedRecipes = [];
     for (const recipe of recipes) {
@@ -564,7 +564,7 @@ const getMyRecipes = async (req, res) => {
 };
 
 // ============================================
-// 📌 EXPORT ALL FUNCTIONS
+// EXPORT ALL FUNCTIONS
 // ============================================
 module.exports = {
   createRecipe,

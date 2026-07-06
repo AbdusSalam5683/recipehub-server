@@ -6,7 +6,7 @@ const { Report } = require('../models/Report.model');
 const getOverview = async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
-    // ✅ deleted বাদ দিন
+    // Exclude deleted recipes
     const totalRecipes = await Recipe.countDocuments({ 
       status: { $ne: 'deleted' }
     });
@@ -36,7 +36,7 @@ const getUsers = async (req, res) => {
     const users = await User.find();
     
     const usersWithStats = await Promise.all(users.map(async (user) => {
-      // ✅ deleted বাদ দিন
+      // Exclude deleted recipes
       const recipeCount = await Recipe.countDocuments({ 
         authorId: user._id,
         status: { $ne: 'deleted' }
@@ -204,10 +204,10 @@ const deleteUser = async (req, res) => {
   }
 };
 
-// ✅ getAllRecipesAdmin - শুধু active এবং reported দেখান (deleted বাদ)
+// Get all recipes for admin - only show active and reported (exclude deleted)
 const getAllRecipesAdmin = async (req, res) => {
   try {
-    // ✅ deleted বাদ দিন
+    // Exclude deleted recipes
     const recipes = await Recipe.find({ 
       status: { $ne: 'deleted' }
     });
@@ -341,7 +341,7 @@ const handleReport = async (req, res) => {
   }
 };
 
-// ✅ Report Stats
+// Get report statistics
 const getReportStats = async (req, res) => {
   try {
     const total = await Report.countDocuments({});

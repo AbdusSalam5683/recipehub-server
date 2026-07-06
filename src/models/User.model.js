@@ -14,18 +14,25 @@ const getCollection = () => {
   return dbInstance.collection('users');
 };
 
-// Get next auto-increment ID
+// Get next auto-increment ID - finds the largest _id
 const getNextId = async () => {
   const collection = getCollection();
-  const lastUser = await collection.find().sort({ _id: -1 }).limit(1).toArray();
+  
+  // Find only numeric _id values (exclude ObjectId)
+  const lastUser = await collection
+    .find({ _id: { $type: 'number' } })
+    .sort({ _id: -1 })
+    .limit(1)
+    .toArray();
+  
   if (lastUser.length === 0) {
-    return 1;
+    // If no numeric _id exists, use total user count
+    const totalUsers = await collection.countDocuments();
+    return totalUsers + 1;
   }
-  if (typeof lastUser[0]._id === 'number') {
-    return lastUser[0]._id + 1;
-  }
-  const count = await collection.countDocuments();
-  return count + 1;
+  
+  // Return the largest _id + 1
+  return lastUser[0]._id + 1;
 };
 
 const User = {
@@ -59,7 +66,24 @@ const User = {
   
   create: async (data) => {
     const collection = getCollection();
-    const nextId = await getNextId();
+    
+    // Generate new _id for the user
+    let nextId = await getNextId();
+    
+    // Check if this _id already exists
+    let existingUser = await collection.findOne({ _id: nextId });
+    
+    // If _id exists, find a new one
+    while (existingUser) {
+      const maxId = await collection
+        .find({ _id: { $type: 'number' } })
+        .sort({ _id: -1 })
+        .limit(1)
+        .toArray();
+      
+      nextId = maxId.length > 0 ? maxId[0]._id + 1 : 1;
+      existingUser = await collection.findOne({ _id: nextId });
+    }
     
     const result = await collection.insertOne({
       _id: nextId,
