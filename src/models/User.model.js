@@ -1,9 +1,17 @@
 // server/src/models/User.model.js
 const { ObjectId } = require('mongodb');
 
+let dbInstance;
+
+const setDB = (db) => {
+  dbInstance = db;
+};
+
 const getCollection = () => {
-  const db = global.getDB();
-  return db.collection('users');
+  if (!dbInstance) {
+    throw new Error('Database not initialized. Call setDB first.');
+  }
+  return dbInstance.collection('users');
 };
 
 // Get next auto-increment ID
@@ -13,11 +21,9 @@ const getNextId = async () => {
   if (lastUser.length === 0) {
     return 1;
   }
-  // If last _id is a number, increment it
   if (typeof lastUser[0]._id === 'number') {
     return lastUser[0]._id + 1;
   }
-  // If last _id is a string (ObjectId), count documents and use that
   const count = await collection.countDocuments();
   return count + 1;
 };
@@ -117,4 +123,4 @@ const User = {
   }
 };
 
-module.exports = User;
+module.exports = { User, setDB };

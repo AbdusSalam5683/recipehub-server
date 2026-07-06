@@ -7,6 +7,14 @@ const morgan = require('morgan');
 const dotenv = require('dotenv');
 const { MongoClient } = require('mongodb');
 
+// ✅ সব Model এর setDB ইম্পোর্ট করুন
+const { setDB: setActivityDB } = require('./models/Activity.model');
+const { setDB: setUserDB } = require('./models/User.model');
+const { setDB: setRecipeDB } = require('./models/Recipe.model');
+const { setDB: setReportDB } = require('./models/Report.model');
+const { setDB: setFavoriteDB } = require('./models/Favorite.model');
+const { setDB: setPaymentDB } = require('./models/Payment.model');
+
 dotenv.config();
 
 const app = express();
@@ -44,7 +52,60 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// MongoDB Connection
+// ============================================
+// 📌 Root Routes
+// ============================================
+
+app.get('/', (req, res) => {
+  res.json({
+    name: 'RecipeHub API',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/api/health',
+      recipes: '/api/recipes',
+      auth: '/api/auth',
+      users: '/api/users',
+      admin: '/api/admin',
+      payment: '/api/payment',
+      activities: '/api/activities',
+      reports: '/api/reports'
+    }
+  });
+});
+
+app.get('/api', (req, res) => {
+  res.json({
+    success: true,
+    message: 'RecipeHub API is running',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      recipes: '/api/recipes',
+      auth: '/api/auth/login',
+      auth_register: '/api/auth/register',
+      users: '/api/users/profile',
+      admin: '/api/admin/overview',
+      payment: '/api/payment/create-premium-checkout',
+      activities: '/api/activities',
+      reports: '/api/reports'
+    }
+  });
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    database: 'MongoDB'
+  });
+});
+
+// ============================================
+// 📌 MongoDB Connection
+// ============================================
+
 const uri = process.env.MONGODB_URI;
 
 if (!uri) {
@@ -67,6 +128,15 @@ async function connectToMongoDB() {
   try {
     await client.connect();
     db = client.db();
+    
+    // ✅ সব Model এ DB সেট করুন
+    setActivityDB(db);
+    setUserDB(db);
+    setRecipeDB(db);
+    setReportDB(db);
+    setFavoriteDB(db);
+    setPaymentDB(db);
+    
     console.log('✅ MongoDB connected successfully!');
     await createAdminUser();
     return client;
@@ -84,30 +154,38 @@ function getDB() {
 
 global.getDB = getDB;
 
-// Routes
+// ============================================
+// 📌 Routes
+// ============================================
+
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const recipeRoutes = require('./routes/recipe.routes');
 const adminRoutes = require('./routes/admin.routes');
 const paymentRoutes = require('./routes/payment.routes');
+const activityRoutes = require('./routes/activity.routes');
 
+
+// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/recipes', recipeRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/activities', activityRoutes);
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    database: 'MongoDB'
+
+// ============================================
+// 📌 Error Handlers
+// ============================================
+
+app.use((req, res) => {
+  res.status(404).json({ 
+    success: false,
+    message: 'Route not found' 
   });
 });
 
-// Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack);
   res.status(err.status || 500).json({
@@ -117,15 +195,10 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ 
-    success: false,
-    message: 'Route not found' 
-  });
-});
+// ============================================
+// 📌 Create Admin User
+// ============================================
 
-// Create admin user
 async function createAdminUser() {
   try {
     const db = getDB();
@@ -164,7 +237,10 @@ async function createAdminUser() {
   }
 }
 
-// Connect to MongoDB and start server
+// ============================================
+// 📌 Start Server
+// ============================================
+
 connectToMongoDB().then(() => {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {

@@ -1,7 +1,7 @@
 // server/src/controllers/admin.controller.js
-const User = require('../models/User.model');
-const Recipe = require('../models/Recipe.model');
-const Report = require('../models/Report.model');
+const { User } = require('../models/User.model');
+const { Recipe } = require('../models/Recipe.model');
+const { Report } = require('../models/Report.model');
 
 const getOverview = async (req, res) => {
   try {
@@ -31,14 +31,23 @@ const getOverview = async (req, res) => {
 const getUsers = async (req, res) => {
   try {
     const users = await User.find();
-    const usersWithoutPassword = users.map(user => {
-      const { password, ...rest } = user;
-      return rest;
-    });
+    
+    const usersWithStats = await Promise.all(users.map(async (user) => {
+      const recipeCount = await Recipe.countDocuments({ 
+        authorId: user._id,
+        status: { $ne: 'deleted' }
+      });
+      
+      const { password, ...userWithoutPassword } = user;
+      return {
+        ...userWithoutPassword,
+        recipeCount
+      };
+    }));
     
     res.json({
       success: true,
-      users: usersWithoutPassword
+      users: usersWithStats
     });
   } catch (error) {
     console.error('Get users error:', error);
@@ -92,11 +101,109 @@ const toggleBlockUser = async (req, res) => {
   }
 };
 
+const changeUserRole = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    if (!role || !['admin', 'user'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid role. Must be "admin" or "user"'
+      });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (user._id.toString() === req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You cannot change your own role'
+      });
+    }
+
+    if (user.role === 'admin' && role === 'user') {
+      const adminCount = await User.countDocuments({ role: 'admin' });
+      if (adminCount <= 1) {
+        return res.status(403).json({
+          success: false,
+          message: 'Cannot remove the last admin'
+        });
+      }
+    }
+
+    await User.updateById(id, { role: role });
+    const updatedUser = await User.findById(id);
+    
+    const { password, ...userWithoutPassword } = updatedUser;
+    res.json({
+      success: true,
+      message: `User role changed to ${role} successfully`,
+      user: userWithoutPassword
+    });
+  } catch (error) {
+    console.error('Change user role error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (user._id.toString() === req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You cannot delete your own account'
+      });
+    }
+
+    if (user.role === 'admin') {
+      const adminCount = await User.countDocuments({ role: 'admin' });
+      if (adminCount <= 1) {
+        return res.status(403).json({
+          success: false,
+          message: 'Cannot delete the last admin'
+        });
+      }
+    }
+
+    await User.deleteById(user._id);
+
+    res.json({
+      success: true,
+      message: 'User deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 const getAllRecipesAdmin = async (req, res) => {
   try {
     const recipes = await Recipe.find();
     
-    // Populate authors
     const populatedRecipes = [];
     for (const recipe of recipes) {
       const author = await User.findById(recipe.authorId);
@@ -151,7 +258,6 @@ const getReports = async (req, res) => {
   try {
     const reports = await Report.find({ status: 'pending' });
     
-    // Populate recipe and reporter
     const populatedReports = [];
     for (const report of reports) {
       const recipe = await Recipe.findById(report.recipeId);
@@ -227,12 +333,41 @@ const handleReport = async (req, res) => {
   }
 };
 
+// ✅ Report Stats (নতুন যোগ)
+const getReportStats = async (req, res) => {
+  try {
+    const total = await Report.countDocuments({});
+    const pending = await Report.countDocuments({ status: 'pending' });
+    const resolved = await Report.countDocuments({ status: 'resolved' });
+    const dismissed = await Report.countDocuments({ status: 'dismissed' });
+
+    res.json({
+      success: true,
+      stats: {
+        total,
+        pending,
+        resolved,
+        dismissed
+      }
+    });
+  } catch (error) {
+    console.error('Get report stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   getOverview,
   getUsers,
   toggleBlockUser,
+  changeUserRole,
+  deleteUser,
   getAllRecipesAdmin,
   toggleFeatureRecipe,
   getReports,
-  handleReport
+  handleReport,
+  getReportStats  // ✅ নতুন যোগ
 };

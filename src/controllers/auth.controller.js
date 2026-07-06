@@ -1,23 +1,20 @@
 // server/src/controllers/auth.controller.js
-const User = require('../models/User.model');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { User } = require('../models/User.model');
+const { logActivity } = require('../models/Activity.model');
 
 const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '7d' });
 };
 
-// ✅ Production-Ready Cookie Options
 const getCookieOptions = () => {
-  const isProduction = process.env.NODE_ENV === 'production';
-  
   return {
     httpOnly: true,
-    secure: true, // HTTPS only
-    sameSite: 'none', // Cross-site requests
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
-    // Domain excluded - browser handles it automatically
   };
 };
 
@@ -39,13 +36,6 @@ const register = async (req, res) => {
       });
     }
 
-    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password)) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Password must contain at least one uppercase and one lowercase letter' 
-      });
-    }
-
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
       return res.status(400).json({ 
@@ -62,9 +52,8 @@ const register = async (req, res) => {
       try {
         const { uploadToImgBB } = require('../utils/imgbbUploader');
         imageUrl = await uploadToImgBB(image);
-        console.log('✅ Profile image uploaded to imgBB');
       } catch (uploadError) {
-        console.error('Image upload failed, using default avatar:', uploadError.message);
+        console.error('Image upload failed:', uploadError.message);
         imageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
       }
     }
@@ -79,8 +68,17 @@ const register = async (req, res) => {
       isBlocked: false
     });
 
-    const token = generateToken(user._id.toString());
+    // ✅ Log activity
+    await logActivity({
+      userId: user._id,
+      userEmail: user.email,
+      userName: user.name,
+      action: 'User registered',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
 
+    const token = generateToken(user._id.toString());
     res.cookie('token', token, getCookieOptions());
 
     const { password: _, ...userWithoutPassword } = user;
@@ -132,8 +130,17 @@ const login = async (req, res) => {
       });
     }
 
-    const token = generateToken(user._id.toString());
+    // ✅ Log activity
+    await logActivity({
+      userId: user._id,
+      userEmail: user.email,
+      userName: user.name,
+      action: 'User logged in',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
 
+    const token = generateToken(user._id.toString());
     res.cookie('token', token, getCookieOptions());
 
     const { password: _, ...userWithoutPassword } = user;
@@ -188,7 +195,16 @@ const googleLogin = async (req, res) => {
         isPremium: false,
         isBlocked: false
       });
-      console.log('✅ New user created via Google:', user.email);
+
+      // ✅ Log activity
+      await logActivity({
+        userId: user._id,
+        userEmail: user.email,
+        userName: user.name,
+        action: 'User registered (Google)',
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
     }
 
     if (user.isBlocked) {
@@ -198,8 +214,17 @@ const googleLogin = async (req, res) => {
       });
     }
 
-    const token = generateToken(user._id.toString());
+    // ✅ Log activity
+    await logActivity({
+      userId: user._id,
+      userEmail: user.email,
+      userName: user.name,
+      action: 'User logged in (Google)',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
 
+    const token = generateToken(user._id.toString());
     res.cookie('token', token, getCookieOptions());
 
     const { password: _, ...userWithoutPassword } = user;
@@ -218,16 +243,36 @@ const googleLogin = async (req, res) => {
 };
 
 const logout = async (req, res) => {
-  res.clearCookie('token', {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none',
-    path: '/',
-  });
-  res.json({ 
-    success: true,
-    message: 'Logged out successfully' 
-  });
+  try {
+    if (req.user) {
+      await logActivity({
+        userId: req.user._id,
+        userEmail: req.user.email,
+        userName: req.user.name,
+        action: 'User logged out',
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+    }
+
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      path: '/',
+    });
+    
+    res.json({ 
+      success: true,
+      message: 'Logged out successfully' 
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
+  }
 };
 
 const getMe = async (req, res) => {

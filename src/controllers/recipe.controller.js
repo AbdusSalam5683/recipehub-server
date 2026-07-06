@@ -1,11 +1,13 @@
 // server/src/controllers/recipe.controller.js
-const Recipe = require('../models/Recipe.model');
-const Favorite = require('../models/Favorite.model');
+const { Recipe } = require('../models/Recipe.model');
+const { User } = require('../models/User.model');
 const Report = require('../models/Report.model');
-const User = require('../models/User.model');
 const { uploadToImgBB } = require('../utils/imgbbUploader');
 const { ObjectId } = require('mongodb');
 
+// ============================================
+// 📌 CREATE RECIPE
+// ============================================
 const createRecipe = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -77,6 +79,9 @@ const createRecipe = async (req, res) => {
   }
 };
 
+// ============================================
+// 📌 GET ALL RECIPES
+// ============================================
 const getAllRecipes = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -142,6 +147,9 @@ const getAllRecipes = async (req, res) => {
   }
 };
 
+// ============================================
+// 📌 GET FEATURED RECIPES
+// ============================================
 const getFeaturedRecipes = async (req, res) => {
   try {
     const recipes = await Recipe.find({ 
@@ -186,6 +194,9 @@ const getFeaturedRecipes = async (req, res) => {
   }
 };
 
+// ============================================
+// 📌 GET POPULAR RECIPES
+// ============================================
 const getPopularRecipes = async (req, res) => {
   try {
     const recipes = await Recipe.find({ status: 'active' });
@@ -231,11 +242,13 @@ const getPopularRecipes = async (req, res) => {
   }
 };
 
+// ============================================
+// 📌 GET RECIPE BY ID
+// ============================================
 const getRecipeById = async (req, res) => {
   try {
     const recipeId = req.params.id;
     
-    // ✅ Validate ID
     if (!recipeId) {
       return res.status(400).json({
         success: false,
@@ -259,7 +272,6 @@ const getRecipeById = async (req, res) => {
       });
     }
 
-    // ✅ Increment views count (asynchronously)
     Recipe.incrementViews(recipeId)
       .then(() => console.log(`📊 Views incremented for recipe ${recipeId}`))
       .catch(err => console.error('View increment error:', err));
@@ -294,6 +306,9 @@ const getRecipeById = async (req, res) => {
   }
 };
 
+// ============================================
+// 📌 UPDATE RECIPE
+// ============================================
 const updateRecipe = async (req, res) => {
   try {
     const recipe = await Recipe.findById(req.params.id);
@@ -353,6 +368,9 @@ const updateRecipe = async (req, res) => {
   }
 };
 
+// ============================================
+// 📌 DELETE RECIPE
+// ============================================
 const deleteRecipe = async (req, res) => {
   try {
     const recipe = await Recipe.findById(req.params.id);
@@ -386,6 +404,9 @@ const deleteRecipe = async (req, res) => {
   }
 };
 
+// ============================================
+// 📌 TOGGLE LIKE
+// ============================================
 const toggleLike = async (req, res) => {
   try {
     const recipe = await Recipe.findById(req.params.id);
@@ -423,6 +444,9 @@ const toggleLike = async (req, res) => {
   }
 };
 
+// ============================================
+// 📌 REPORT RECIPE
+// ============================================
 const reportRecipe = async (req, res) => {
   try {
     const { reason, description } = req.body;
@@ -479,17 +503,31 @@ const reportRecipe = async (req, res) => {
   }
 };
 
+// ============================================
+// 📌 GET MY RECIPES (FIXED)
+// ============================================
 const getMyRecipes = async (req, res) => {
   try {
     const userId = req.user._id;
     console.log('📝 Fetching recipes for user:', userId);
     
-    const recipes = await Recipe.find({ 
-      authorId: userId,
-      status: { $ne: 'deleted' }
-    });
+    // ✅ ডিরেক্ট MongoDB collection ব্যবহার
+    const db = global.getDB();
+    const collection = db.collection('recipes');
+    
+    // ✅ সব রেসিপি দেখুন (ডিবাগিং এর জন্য)
+    const allRecipes = await collection.find({}).toArray();
+    console.log('📊 Total recipes in DB:', allRecipes.length);
+    
+    // ✅ ইউজারের রেসিপি খুঁজুন
+    const recipes = await collection
+      .find({ 
+        authorId: userId
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
 
-    console.log('📊 Found recipes:', recipes.length);
+    console.log('📊 Found recipes for user:', recipes.length);
 
     const populatedRecipes = [];
     for (const recipe of recipes) {
@@ -529,6 +567,9 @@ const getMyRecipes = async (req, res) => {
   }
 };
 
+// ============================================
+// 📌 EXPORT ALL FUNCTIONS
+// ============================================
 module.exports = {
   createRecipe,
   getAllRecipes,

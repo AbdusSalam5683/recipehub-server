@@ -1,8 +1,8 @@
 // server/src/controllers/payment.controller.js
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const Payment = require('../models/Payment.model');
-const User = require('../models/User.model');
-const Recipe = require('../models/Recipe.model');
+const { Payment } = require('../models/Payment.model');  // ✅ { Payment } ব্যবহার করুন
+const { User } = require('../models/User.model');        // ✅ { User } ব্যবহার করুন
+const { Recipe } = require('../models/Recipe.model');    // ✅ { Recipe } ব্যবহার করুন
 
 const createPremiumCheckout = async (req, res) => {
   try {
@@ -169,11 +169,9 @@ const verifyPayment = async (req, res) => {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     
     if (session.payment_status === 'paid') {
-      // ✅ Check if payment already exists
       let payment = await Payment.findOne({ transactionId: sessionId });
       
       if (!payment) {
-        // ✅ Create new payment with proper ID
         payment = await Payment.create({
           userId: req.user._id,
           userEmail: req.user.email,
@@ -185,7 +183,6 @@ const verifyPayment = async (req, res) => {
           paidAt: new Date()
         });
 
-        // ✅ Update user premium status
         if (session.metadata.type === 'premium_membership') {
           await User.updateById(req.user._id, { isPremium: true });
           console.log('✅ User upgraded to premium:', req.user.email);
@@ -212,7 +209,6 @@ const verifyPayment = async (req, res) => {
   }
 };
 
-// ✅ Get user's purchased recipes
 const getPurchasedRecipes = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -225,7 +221,6 @@ const getPurchasedRecipes = async (req, res) => {
       paymentStatus: 'success'
     });
 
-    // ✅ JavaScript sort ব্যবহার করুন
     const sortedPayments = payments.sort((a, b) => {
       return new Date(b.paidAt) - new Date(a.paidAt);
     });

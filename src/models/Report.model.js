@@ -1,89 +1,102 @@
-// server/src/models/Recipe.model.js
+// server/src/models/Report.model.js
 const { ObjectId } = require('mongodb');
 
-const getCollection = () => {
-  const db = global.getDB();
-  return db.collection('recipes');
+let dbInstance;
+
+const setDB = (db) => {
+  dbInstance = db;
 };
 
-const Recipe = {
-  find: async (filter = {}) => {
-    const collection = getCollection();
-    return await collection.find(filter).toArray();
-  },
-  
-  findOne: async (filter) => {
-    const collection = getCollection();
-    return await collection.findOne(filter);
-  },
-  
-  findById: async (id) => {
-    const collection = getCollection();
-    try {
-      const objectId = typeof id === 'string' ? new ObjectId(id) : id;
-      return await collection.findOne({ _id: objectId });
-    } catch (error) {
-      console.error('FindById error:', error);
-      return null;
-    }
-  },
-  
+const getCollection = () => {
+  if (!dbInstance) {
+    throw new Error('Database not initialized. Call setDB first.');
+  }
+  return dbInstance.collection('reports');
+};
+
+const Report = {
   create: async (data) => {
     const collection = getCollection();
     const result = await collection.insertOne({
       ...data,
-      likesCount: 0,
-      isFeatured: false,
-      status: 'active',
+      status: 'pending',
       createdAt: new Date(),
       updatedAt: new Date()
     });
     return await collection.findOne({ _id: result.insertedId });
   },
-  
-  updateOne: async (filter, update) => {
+
+  find: async (filter = {}) => {
     const collection = getCollection();
-    const result = await collection.updateOne(filter, {
-      $set: { ...update, updatedAt: new Date() }
-    });
-    return result;
+    return await collection.find(filter).toArray();
   },
-  
+
+  findOne: async (filter) => {
+    const collection = getCollection();
+    return await collection.findOne(filter);
+  },
+
+  findById: async (id) => {
+    const collection = getCollection();
+    try {
+      if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
+        const numericId = typeof id === 'string' ? parseInt(id) : id;
+        return await collection.findOne({ _id: numericId });
+      }
+      const objectId = typeof id === 'string' ? new ObjectId(id) : id;
+      return await collection.findOne({ _id: objectId });
+    } catch (error) {
+      console.error('FindById error:', error);
+      if (typeof id === 'string' && /^\d+$/.test(id)) {
+        return await collection.findOne({ _id: parseInt(id) });
+      }
+      return null;
+    }
+  },
+
   updateById: async (id, update) => {
     const collection = getCollection();
     try {
-      const objectId = typeof id === 'string' ? new ObjectId(id) : id;
-      const result = await collection.updateOne(
-        { _id: objectId },
-        { $set: { ...update, updatedAt: new Date() } }
-      );
+      let query = {};
+      if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
+        const numericId = typeof id === 'string' ? parseInt(id) : id;
+        query = { _id: numericId };
+      } else {
+        const objectId = typeof id === 'string' ? new ObjectId(id) : id;
+        query = { _id: objectId };
+      }
+      const result = await collection.updateOne(query, {
+        $set: { ...update, updatedAt: new Date() }
+      });
       return result;
     } catch (error) {
       console.error('UpdateById error:', error);
       return null;
     }
   },
-  
+
   deleteById: async (id) => {
     const collection = getCollection();
     try {
-      const objectId = typeof id === 'string' ? new ObjectId(id) : id;
-      return await collection.deleteOne({ _id: objectId });
+      let query = {};
+      if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
+        const numericId = typeof id === 'string' ? parseInt(id) : id;
+        query = { _id: numericId };
+      } else {
+        const objectId = typeof id === 'string' ? new ObjectId(id) : id;
+        query = { _id: objectId };
+      }
+      return await collection.deleteOne(query);
     } catch (error) {
       console.error('DeleteById error:', error);
       return null;
     }
   },
-  
+
   countDocuments: async (filter = {}) => {
     const collection = getCollection();
     return await collection.countDocuments(filter);
-  },
-  
-  aggregate: async (pipeline) => {
-    const collection = getCollection();
-    return await collection.aggregate(pipeline).toArray();
   }
 };
 
-module.exports = Recipe;
+module.exports = { Report, setDB };

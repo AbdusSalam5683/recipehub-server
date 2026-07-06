@@ -1,51 +1,23 @@
 // server/src/models/Recipe.model.js
 const { ObjectId } = require('mongodb');
 
+let dbInstance;
+
+const setDB = (db) => {
+  dbInstance = db;
+};
+
 const getCollection = () => {
-  const db = global.getDB();
-  return db.collection('recipes');
+  if (!dbInstance) {
+    throw new Error('Database not initialized. Call setDB first.');
+  }
+  return dbInstance.collection('recipes');
 };
 
 const Recipe = {
-  find: async (filter = {}) => {
-    const collection = getCollection();
-    return await collection.find(filter).toArray();
-  },
-  
-  findOne: async (filter) => {
-    const collection = getCollection();
-    return await collection.findOne(filter);
-  },
-  
-  findById: async (id) => {
-    const collection = getCollection();
-    try {
-      if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
-        const numericId = typeof id === 'string' ? parseInt(id) : id;
-        return await collection.findOne({ _id: numericId });
-      }
-      if (typeof id === 'string' && id.length === 24) {
-        const objectId = new ObjectId(id);
-        return await collection.findOne({ _id: objectId });
-      }
-      if (id instanceof ObjectId) {
-        return await collection.findOne({ _id: id });
-      }
-      console.warn('⚠️ Invalid ID format:', id);
-      return null;
-    } catch (error) {
-      console.error('FindById error:', error);
-      return null;
-    }
-  },
-  
   create: async (data) => {
     const collection = getCollection();
-    const lastRecipe = await collection.find().sort({ _id: -1 }).limit(1).toArray();
-    const nextId = lastRecipe.length > 0 ? lastRecipe[0]._id + 1 : 1;
-    
     const result = await collection.insertOne({
-      _id: nextId,
       ...data,
       likesCount: 0,
       viewsCount: 0,
@@ -54,17 +26,37 @@ const Recipe = {
       createdAt: new Date(),
       updatedAt: new Date()
     });
-    return await collection.findOne({ _id: nextId });
+    return await collection.findOne({ _id: result.insertedId });
   },
-  
-  updateOne: async (filter, update) => {
+
+  find: async (filter = {}) => {
     const collection = getCollection();
-    const result = await collection.updateOne(filter, {
-      $set: { ...update, updatedAt: new Date() }
-    });
-    return result;
+    return await collection.find(filter).toArray();
   },
-  
+
+  findOne: async (filter) => {
+    const collection = getCollection();
+    return await collection.findOne(filter);
+  },
+
+  findById: async (id) => {
+    const collection = getCollection();
+    try {
+      if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
+        const numericId = typeof id === 'string' ? parseInt(id) : id;
+        return await collection.findOne({ _id: numericId });
+      }
+      const objectId = typeof id === 'string' ? new ObjectId(id) : id;
+      return await collection.findOne({ _id: objectId });
+    } catch (error) {
+      console.error('FindById error:', error);
+      if (typeof id === 'string' && /^\d+$/.test(id)) {
+        return await collection.findOne({ _id: parseInt(id) });
+      }
+      return null;
+    }
+  },
+
   updateById: async (id, update) => {
     const collection = getCollection();
     try {
@@ -72,13 +64,9 @@ const Recipe = {
       if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
         const numericId = typeof id === 'string' ? parseInt(id) : id;
         query = { _id: numericId };
-      } else if (typeof id === 'string' && id.length === 24) {
-        query = { _id: new ObjectId(id) };
-      } else if (id instanceof ObjectId) {
-        query = { _id: id };
       } else {
-        console.warn('⚠️ Invalid ID format for update:', id);
-        return null;
+        const objectId = typeof id === 'string' ? new ObjectId(id) : id;
+        query = { _id: objectId };
       }
       const result = await collection.updateOne(query, {
         $set: { ...update, updatedAt: new Date() }
@@ -89,7 +77,7 @@ const Recipe = {
       return null;
     }
   },
-  
+
   deleteById: async (id) => {
     const collection = getCollection();
     try {
@@ -97,32 +85,24 @@ const Recipe = {
       if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
         const numericId = typeof id === 'string' ? parseInt(id) : id;
         query = { _id: numericId };
-      } else if (typeof id === 'string' && id.length === 24) {
-        query = { _id: new ObjectId(id) };
-      } else if (id instanceof ObjectId) {
-        query = { _id: id };
       } else {
-        console.warn('⚠️ Invalid ID format for delete:', id);
-        return null;
+        const objectId = typeof id === 'string' ? new ObjectId(id) : id;
+        query = { _id: objectId };
       }
-      return await collection.deleteOne(query);
+      return await collection.updateOne(query, {
+        $set: { status: 'deleted', updatedAt: new Date() }
+      });
     } catch (error) {
       console.error('DeleteById error:', error);
       return null;
     }
   },
-  
+
   countDocuments: async (filter = {}) => {
     const collection = getCollection();
     return await collection.countDocuments(filter);
   },
-  
-  aggregate: async (pipeline) => {
-    const collection = getCollection();
-    return await collection.aggregate(pipeline).toArray();
-  },
-  
-  // ✅ Increment views count
+
   incrementViews: async (id) => {
     const collection = getCollection();
     try {
@@ -130,18 +110,13 @@ const Recipe = {
       if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
         const numericId = typeof id === 'string' ? parseInt(id) : id;
         query = { _id: numericId };
-      } else if (typeof id === 'string' && id.length === 24) {
-        query = { _id: new ObjectId(id) };
-      } else if (id instanceof ObjectId) {
-        query = { _id: id };
       } else {
-        console.warn('⚠️ Invalid ID format for views increment:', id);
-        return null;
+        const objectId = typeof id === 'string' ? new ObjectId(id) : id;
+        query = { _id: objectId };
       }
-      const result = await collection.updateOne(query, {
+      return await collection.updateOne(query, {
         $inc: { viewsCount: 1 }
       });
-      return result;
     } catch (error) {
       console.error('Increment views error:', error);
       return null;
@@ -149,4 +124,4 @@ const Recipe = {
   }
 };
 
-module.exports = Recipe;
+module.exports = { Recipe, setDB };

@@ -1,44 +1,54 @@
 // server/src/controllers/user.controller.js
-const User = require('../models/User.model');
-const Favorite = require('../models/Favorite.model');
-const Recipe = require('../models/Recipe.model');
-const { uploadToImgBB } = require('../utils/imgbbUploader');
-const { ObjectId } = require('mongodb');
+const { User } = require('../models/User.model');
+const { Recipe } = require('../models/Recipe.model');
+const { logActivity } = require('../models/Activity.model');
 
 const getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-    const { password: _, ...userWithoutPassword } = user;
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    const { password, ...userWithoutPassword } = user;
     res.json({
       success: true,
       user: userWithoutPassword
     });
   } catch (error) {
     console.error('Get profile error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: error.message 
+      message: error.message
     });
   }
 };
 
 const updateProfile = async (req, res) => {
   try {
+    const userId = req.user._id;
     const { name, image } = req.body;
-    const updates = {};
-
-    if (name) updates.name = name;
     
-    if (image && image.startsWith('data:image')) {
-      updates.image = await uploadToImgBB(image);
-    } else if (image) {
-      updates.image = image;
-    }
-
-    await User.updateById(req.user._id, updates);
-    const user = await User.findById(req.user._id);
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (image) updateData.image = image;
     
-    const { password: _, ...userWithoutPassword } = user;
+    await User.updateById(userId, updateData);
+    
+    const user = await User.findById(userId);
+    const { password, ...userWithoutPassword } = user;
+    
+    await logActivity({
+      userId: userId,
+      userEmail: user.email,
+      userName: user.name,
+      action: 'Updated profile',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+    
     res.json({
       success: true,
       message: 'Profile updated successfully',
@@ -46,146 +56,166 @@ const updateProfile = async (req, res) => {
     });
   } catch (error) {
     console.error('Update profile error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: error.message 
+      message: error.message
     });
   }
 };
 
 const getUserStats = async (req, res) => {
   try {
-    const [totalRecipes, totalFavorites, totalLikesResult, totalViewsResult] = await Promise.all([
-      Recipe.countDocuments({ 
-        authorId: req.user._id,
-        status: 'active'
-      }),
-      Favorite.countDocuments({ 
-        userId: req.user._id 
-      }),
-      Recipe.aggregate([
-        { $match: { authorId: req.user._id, status: 'active' } },
-        { $group: { _id: null, total: { $sum: '$likesCount' } } }
-      ]),
-      Recipe.aggregate([
-        { $match: { authorId: req.user._id, status: 'active' } },
-        { $group: { _id: null, total: { $sum: '$viewsCount' } } }
-      ])
-    ]);
-
+    const userId = req.user._id;
+    
+    const totalRecipes = await Recipe.countDocuments({ 
+      authorId: userId,
+      status: 'active' 
+    });
+    
+    const user = await User.findById(userId);
+    const totalFavorites = (user.favorites || []).length;
+    
+    const recipes = await Recipe.find({ 
+      authorId: userId,
+      status: 'active' 
+    });
+    const totalLikes = recipes.reduce((sum, r) => sum + (r.likesCount || 0), 0);
+    const totalViews = recipes.reduce((sum, r) => sum + (r.viewsCount || 0), 0);
+    
     res.json({
       success: true,
       stats: {
         totalRecipes,
         totalFavorites,
-        totalLikesReceived: totalLikesResult[0]?.total || 0,
-        totalViews: totalViewsResult[0]?.total || 0,
-        isPremium: req.user.isPremium,
-        isBlocked: req.user.isBlocked,
-        role: req.user.role
+        totalLikes,
+        totalViews
       }
     });
   } catch (error) {
     console.error('Get user stats error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: error.message 
+      message: error.message
     });
   }
 };
 
 const getFavorites = async (req, res) => {
   try {
-    const favorites = await Favorite.find({ userId: req.user._id });
+    const userId = req.user._id;
+    const user = await User.findById(userId);
     
-    const populatedFavorites = [];
-    for (const fav of favorites) {
-      const recipe = await Recipe.findById(fav.recipeId);
-      if (recipe && recipe.status !== 'deleted') {
-        const author = await User.findById(recipe.authorId);
-        populatedFavorites.push({
-          ...fav,
-          recipeId: {
-            ...recipe,
-            authorId: author
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const favoriteIds = user.favorites || [];
+    const recipes = [];
+    
+    if (favoriteIds.length > 0) {
+      for (const id of favoriteIds) {
+        try {
+          const recipe = await Recipe.findById(id);
+          if (recipe && recipe.status !== 'deleted') {
+            recipes.push(recipe);
           }
-        });
+        } catch (err) {
+          console.error('Error fetching favorite recipe:', err);
+        }
       }
     }
 
     res.json({
       success: true,
-      favorites: populatedFavorites
+      favorites: recipes
     });
   } catch (error) {
     console.error('Get favorites error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: error.message 
+      message: error.message
     });
   }
 };
 
 const toggleFavorite = async (req, res) => {
   try {
-    const recipeId = req.params.recipeId;
     const userId = req.user._id;
-
+    const recipeId = req.params.recipeId;
+    
     const recipe = await Recipe.findById(recipeId);
     if (!recipe) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Recipe not found' 
+        message: 'Recipe not found'
+      });
+    }
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
       });
     }
 
-    const existingFavorite = await Favorite.findOne({ userId, recipeId });
-
-    if (existingFavorite) {
-      await Favorite.deleteOne({ userId, recipeId });
-      return res.json({ 
+    const favorites = user.favorites || [];
+    const index = favorites.indexOf(recipeId);
+    
+    if (index > -1) {
+      favorites.splice(index, 1);
+      await User.updateById(userId, { favorites: favorites });
+      res.json({
         success: true,
         message: 'Removed from favorites',
         isFavorite: false
       });
+    } else {
+      favorites.push(recipeId);
+      await User.updateById(userId, { favorites: favorites });
+      res.json({
+        success: true,
+        message: 'Added to favorites',
+        isFavorite: true
+      });
     }
-
-    await Favorite.create({
-      userId,
-      userEmail: req.user.email,
-      recipeId
-    });
-
-    res.status(201).json({
-      success: true,
-      message: 'Added to favorites',
-      isFavorite: true
-    });
   } catch (error) {
     console.error('Toggle favorite error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: error.message 
+      message: error.message
     });
   }
 };
 
 const checkFavorite = async (req, res) => {
   try {
-    const favorite = await Favorite.findOne({
-      userId: req.user._id,
-      recipeId: req.params.recipeId
-    });
+    const userId = req.user._id;
+    const recipeId = req.params.recipeId;
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
 
-    res.json({ 
+    const favorites = user.favorites || [];
+    const isFavorite = favorites.includes(recipeId);
+
+    res.json({
       success: true,
-      isFavorite: !!favorite 
+      isFavorite
     });
   } catch (error) {
     console.error('Check favorite error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: error.message 
+      message: error.message
     });
   }
 };

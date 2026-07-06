@@ -1,12 +1,20 @@
 // server/src/models/Payment.model.js
 const { ObjectId } = require('mongodb');
 
-const getCollection = () => {
-  const db = global.getDB();
-  return db.collection('payments');
+let dbInstance;
+
+const setDB = (db) => {
+  dbInstance = db;
 };
 
-// ✅ Get next auto-increment ID
+const getCollection = () => {
+  if (!dbInstance) {
+    throw new Error('Database not initialized. Call setDB first.');
+  }
+  return dbInstance.collection('payments');
+};
+
+// Get next auto-increment ID
 const getNextId = async () => {
   const collection = getCollection();
   const lastPayment = await collection.find().sort({ _id: -1 }).limit(1).toArray();
@@ -53,7 +61,6 @@ const Payment = {
     }
   },
   
-  // ✅ Fixed create method
   create: async (data) => {
     const collection = getCollection();
     const nextId = await getNextId();
@@ -120,4 +127,4 @@ const Payment = {
   }
 };
 
-module.exports = Payment;
+module.exports = { Payment, setDB };

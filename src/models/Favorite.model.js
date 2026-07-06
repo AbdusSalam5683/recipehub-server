@@ -1,12 +1,20 @@
 // server/src/models/Favorite.model.js
 const { ObjectId } = require('mongodb');
 
-const getCollection = () => {
-  const db = global.getDB();
-  return db.collection('favorites');
+let dbInstance;
+
+const setDB = (db) => {
+  dbInstance = db;
 };
 
-// ✅ Get next auto-increment ID
+const getCollection = () => {
+  if (!dbInstance) {
+    throw new Error('Database not initialized. Call setDB first.');
+  }
+  return dbInstance.collection('favorites');
+};
+
+// Get next auto-increment ID
 const getNextId = async () => {
   const collection = getCollection();
   const lastItem = await collection.find().sort({ _id: -1 }).limit(1).toArray();
@@ -52,7 +60,6 @@ const Favorite = {
     }
   },
   
-  // ✅ Fixed create method with auto-increment ID
   create: async (data) => {
     const collection = getCollection();
     const nextId = await getNextId();
@@ -97,4 +104,4 @@ const Favorite = {
   }
 };
 
-module.exports = Favorite;
+module.exports = { Favorite, setDB };
