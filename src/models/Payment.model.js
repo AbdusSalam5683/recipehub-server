@@ -1,4 +1,3 @@
-// server/src/models/Payment.model.js
 const { ObjectId } = require('mongodb');
 
 let dbInstance;
@@ -29,14 +28,45 @@ const getNextId = async () => {
 };
 
 const Payment = {
+  // ✅ FIXED: find method with proper filter handling
   find: async (filter = {}) => {
     const collection = getCollection();
-    return await collection.find(filter).toArray();
+    console.log('🔍 Payment.find filter:', JSON.stringify(filter, null, 2));
+    
+    // ✅ Handle userId type mismatch
+    let query = { ...filter };
+    
+    // If userId is provided, try both string and number
+    if (filter.userId !== undefined) {
+      const userId = filter.userId;
+      
+      // Remove the original userId from query
+      delete query.userId;
+      
+      // Create OR condition for both string and number
+      query = {
+        $or: [
+          { userId: userId },
+          { userId: parseInt(userId) },
+          { userId: userId.toString() }
+        ],
+        ...query
+      };
+    }
+    
+    console.log('🔍 Final query:', JSON.stringify(query, null, 2));
+    
+    const results = await collection.find(query).toArray();
+    console.log(`📊 Found ${results.length} payments`);
+    return results;
   },
   
   findOne: async (filter) => {
     const collection = getCollection();
-    return await collection.findOne(filter);
+    console.log('🔍 Payment.findOne filter:', JSON.stringify(filter, null, 2));
+    const result = await collection.findOne(filter);
+    console.log('📊 Result:', result ? 'Found' : 'Not found');
+    return result;
   },
   
   findById: async (id) => {
@@ -65,6 +95,14 @@ const Payment = {
     const collection = getCollection();
     const nextId = await getNextId();
     
+    console.log('📝 Creating payment record:', {
+      id: nextId,
+      userId: data.userId,
+      userEmail: data.userEmail,
+      type: data.paymentType,
+      status: data.paymentStatus
+    });
+    
     const result = await collection.insertOne({
       _id: nextId,
       ...data,
@@ -91,6 +129,10 @@ const Payment = {
       }
       const result = await collection.updateOne(query, {
         $set: { ...update, updatedAt: new Date() }
+      });
+      console.log('📊 updateById result:', {
+        matchedCount: result.matchedCount,
+        modifiedCount: result.modifiedCount
       });
       return result;
     } catch (error) {

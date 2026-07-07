@@ -47,15 +47,31 @@ app.use(helmet({
 }));
 app.use(morgan('dev'));
 
-// ✅ IMPORTANT: Webhook route must be registered BEFORE express.json()
-// Import payment routes
-const paymentRoutes = require('./routes/payment.routes');
-app.use('/api/payment', paymentRoutes);
+// ✅ IMPORTANT: Cookie Parser MUST be before routes
+app.use(cookieParser());
 
-// ✅ Then apply express.json() for all other routes
+// ✅ IMPORTANT: express.json() before routes
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(cookieParser());
+
+// ============================================
+// Routes
+// ============================================
+
+const authRoutes = require('./routes/auth.routes');
+const userRoutes = require('./routes/user.routes');
+const recipeRoutes = require('./routes/recipe.routes');
+const adminRoutes = require('./routes/admin.routes');
+const paymentRoutes = require('./routes/payment.routes');
+const activityRoutes = require('./routes/activity.routes');
+
+// ✅ API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/recipes', recipeRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/payment', paymentRoutes);
+app.use('/api/activities', activityRoutes);
 
 // ============================================
 // Root Routes
@@ -168,22 +184,6 @@ function getDB() {
 }
 
 global.getDB = getDB;
-
-// ============================================
-// Routes
-// ============================================
-
-const authRoutes = require('./routes/auth.routes');
-const userRoutes = require('./routes/user.routes');
-const recipeRoutes = require('./routes/recipe.routes');
-const adminRoutes = require('./routes/admin.routes');
-const activityRoutes = require('./routes/activity.routes');
-
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/recipes', recipeRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/activities', activityRoutes);
 
 // ============================================
 // Error Handlers

@@ -9,15 +9,27 @@ const {
   getPurchasedRecipes
 } = require('../controllers/payment.controller');
 
-// ✅ Webhook route - MUST come before express.json() middleware
-// This route needs raw body for Stripe signature verification
+// ✅ Webhook route - no auth (raw body needed)
 router.post('/webhook', express.raw({type: 'application/json'}), handleWebhook);
 
+// ✅ Test route - check if auth works
+router.get('/test-auth', verifyToken, (req, res) => {
+  res.json({
+    success: true,
+    message: '✅ Auth middleware working!',
+    user: {
+      id: req.user._id,
+      email: req.user.email,
+      name: req.user.name,
+      role: req.user.role
+    }
+  });
+});
+
 // ✅ Protected routes - require authentication
-router.use(verifyToken);
-router.post('/create-premium-checkout', createPremiumCheckout);
-router.post('/create-recipe-checkout', createRecipePurchaseCheckout);
-router.get('/verify', verifyPayment);
-router.get('/purchased', getPurchasedRecipes);
+router.post('/create-premium-checkout', verifyToken, createPremiumCheckout);
+router.post('/create-recipe-checkout', verifyToken, createRecipePurchaseCheckout);
+router.get('/verify', verifyToken, verifyPayment);
+router.get('/purchased', verifyToken, getPurchasedRecipes);
 
 module.exports = router;
