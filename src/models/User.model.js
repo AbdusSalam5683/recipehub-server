@@ -1,4 +1,3 @@
-// server/src/models/User.model.js
 const { ObjectId } = require('mongodb');
 
 let dbInstance;
@@ -14,11 +13,10 @@ const getCollection = () => {
   return dbInstance.collection('users');
 };
 
-// Get next auto-increment ID - finds the largest _id
+// Get next auto-increment ID
 const getNextId = async () => {
   const collection = getCollection();
   
-  // Find only numeric _id values (exclude ObjectId)
   const lastUser = await collection
     .find({ _id: { $type: 'number' } })
     .sort({ _id: -1 })
@@ -26,12 +24,10 @@ const getNextId = async () => {
     .toArray();
   
   if (lastUser.length === 0) {
-    // If no numeric _id exists, use total user count
     const totalUsers = await collection.countDocuments();
     return totalUsers + 1;
   }
   
-  // Return the largest _id + 1
   return lastUser[0]._id + 1;
 };
 
@@ -67,13 +63,10 @@ const User = {
   create: async (data) => {
     const collection = getCollection();
     
-    // Generate new _id for the user
     let nextId = await getNextId();
     
-    // Check if this _id already exists
     let existingUser = await collection.findOne({ _id: nextId });
     
-    // If _id exists, find a new one
     while (existingUser) {
       const maxId = await collection
         .find({ _id: { $type: 'number' } })
@@ -94,31 +87,70 @@ const User = {
     return await collection.findOne({ _id: nextId });
   },
   
+  // ✅ FIXED: updateOne method with proper error handling
   updateOne: async (filter, update) => {
     const collection = getCollection();
-    const result = await collection.updateOne(filter, {
-      $set: { ...update, updatedAt: new Date() }
-    });
-    return result;
+    try {
+      const result = await collection.updateOne(filter, {
+        $set: { ...update, updatedAt: new Date() }
+      });
+      console.log('📊 updateOne result:', {
+        matchedCount: result.matchedCount,
+        modifiedCount: result.modifiedCount,
+        upsertedId: result.upsertedId
+      });
+      return result;
+    } catch (error) {
+      console.error('❌ updateOne error:', error);
+      return null;
+    }
   },
   
+  // ✅ FIXED: updateById with better error handling
   updateById: async (id, update) => {
     const collection = getCollection();
     try {
       let query = {};
+      
+      // Handle numeric ID
       if (typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id))) {
         const numericId = typeof id === 'string' ? parseInt(id) : id;
         query = { _id: numericId };
+      } 
+      // Handle ObjectId string
+      else if (typeof id === 'string' && id.length === 24) {
+        query = { _id: new ObjectId(id) };
+      } 
+      // Handle ObjectId instance
+      else if (id instanceof ObjectId) {
+        query = { _id: id };
+      } 
+      // Handle string id that might be ObjectId
+      else if (typeof id === 'string') {
+        try {
+          query = { _id: new ObjectId(id) };
+        } catch {
+          query = { _id: id };
+        }
       } else {
-        const objectId = typeof id === 'string' ? new ObjectId(id) : id;
-        query = { _id: objectId };
+        console.error('❌ Invalid ID format for updateById:', id);
+        return null;
       }
+
+      console.log('🔍 updateById query:', query);
+      
       const result = await collection.updateOne(query, {
         $set: { ...update, updatedAt: new Date() }
       });
+
+      console.log('📊 updateById result:', {
+        matchedCount: result.matchedCount,
+        modifiedCount: result.modifiedCount
+      });
+
       return result;
     } catch (error) {
-      console.error('UpdateById error:', error);
+      console.error('❌ updateById error:', error);
       return null;
     }
   },

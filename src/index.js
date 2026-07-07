@@ -17,7 +17,7 @@ dotenv.config();
 
 const app = express();
 
-// ✅ FIXED: No duplicate origins
+// ✅ CORS Configuration
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5000',
@@ -46,13 +46,19 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 app.use(morgan('dev'));
+
+// ✅ IMPORTANT: Webhook route must be registered BEFORE express.json()
+// Import payment routes
+const paymentRoutes = require('./routes/payment.routes');
+app.use('/api/payment', paymentRoutes);
+
+// ✅ Then apply express.json() for all other routes
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-
 // ============================================
-// 📌 Root Routes
+// Root Routes
 // ============================================
 
 app.get('/', (req, res) => {
@@ -102,7 +108,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // ============================================
-// 📌 MongoDB Connection
+// MongoDB Connection
 // ============================================
 
 const uri = process.env.MONGODB_URI;
@@ -113,8 +119,7 @@ if (!uri) {
 }
 
 if (!uri.startsWith('mongodb://') && !uri.startsWith('mongodb+srv://')) {
-  console.error('❌ Invalid MONGODB_URI format. Must start with mongodb:// or mongodb+srv://');
-  console.error(`Current URI: ${uri}`);
+  console.error('❌ Invalid MONGODB_URI format');
   process.exit(1);
 }
 
@@ -128,7 +133,6 @@ async function connectToMongoDB() {
     await client.connect();
     db = client.db();
     
-    // ✅ সব Model এ DB সেট করুন
     setActivityDB(db);
     setUserDB(db);
     setRecipeDB(db);
@@ -141,13 +145,10 @@ async function connectToMongoDB() {
     return client;
   } catch (err) {
     console.error('❌ MongoDB connection error:', err.message);
-    console.log('💡 Please check your MONGODB_URI in .env file');
-    console.log('💡 Make sure the password is URL encoded');
     process.exit(1);
   }
 }
 
-// ✅ Added: Database reconnection logic
 client.on('error', async (err) => {
   console.error('❌ MongoDB error:', err);
   console.log('🔄 Attempting to reconnect...');
@@ -157,7 +158,7 @@ client.on('error', async (err) => {
       db = client.db();
       console.log('✅ MongoDB reconnected successfully!');
     } catch (e) {
-      console.error('❌ Failed to reconnect to MongoDB:', e);
+      console.error('❌ Failed to reconnect:', e);
     }
   }, 5000);
 });
@@ -169,28 +170,23 @@ function getDB() {
 global.getDB = getDB;
 
 // ============================================
-// 📌 Routes
+// Routes
 // ============================================
 
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const recipeRoutes = require('./routes/recipe.routes');
 const adminRoutes = require('./routes/admin.routes');
-const paymentRoutes = require('./routes/payment.routes');
 const activityRoutes = require('./routes/activity.routes');
 
-
-// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/recipes', recipeRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/payment', paymentRoutes);
 app.use('/api/activities', activityRoutes);
 
-
 // ============================================
-// 📌 Error Handlers
+// Error Handlers
 // ============================================
 
 app.use((req, res) => {
@@ -200,11 +196,9 @@ app.use((req, res) => {
   });
 });
 
-// ✅ Fixed: Better error handler
 app.use((err, req, res, next) => {
   console.error('❌ Error:', err.stack);
   
-  // Handle specific errors
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({
       success: false,
@@ -234,7 +228,7 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================
-// 📌 Create Admin User
+// Create Admin User
 // ============================================
 
 async function createAdminUser() {
@@ -276,7 +270,7 @@ async function createAdminUser() {
 }
 
 // ============================================
-// 📌 Start Server
+// Start Server
 // ============================================
 
 connectToMongoDB().then(() => {
@@ -289,7 +283,6 @@ connectToMongoDB().then(() => {
   });
 });
 
-// Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🔄 Closing MongoDB connection...');
   await client.close();
@@ -297,7 +290,6 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-// Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err);
 });

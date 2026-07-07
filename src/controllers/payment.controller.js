@@ -1,9 +1,9 @@
-// server/src/controllers/payment.controller.js
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const { Payment } = require('../models/Payment.model');  // ✅ { Payment } ব্যবহার করুন
-const { User } = require('../models/User.model');        // ✅ { User } ব্যবহার করুন
-const { Recipe } = require('../models/Recipe.model');    // ✅ { Recipe } ব্যবহার করুন
+const { Payment } = require('../models/Payment.model');
+const { User } = require('../models/User.model');
+const { Recipe } = require('../models/Recipe.model');
 
+// Create premium membership checkout session
 const createPremiumCheckout = async (req, res) => {
   try {
     const session = await stripe.checkout.sessions.create({
@@ -45,6 +45,7 @@ const createPremiumCheckout = async (req, res) => {
   }
 };
 
+// Create recipe purchase checkout session
 const createRecipePurchaseCheckout = async (req, res) => {
   try {
     const { recipeId } = req.body;
@@ -105,6 +106,7 @@ const createRecipePurchaseCheckout = async (req, res) => {
   }
 };
 
+// ✅ FIXED: Webhook handler with better error handling and logging
 const handleWebhook = async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
@@ -116,17 +118,33 @@ const handleWebhook = async (req, res) => {
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
+    console.error('❌ Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
+  console.log('📦 Webhook event received:', event.type);
+
+  // Handle checkout.session.completed event
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const { userId, userEmail, recipeId, type } = session.metadata;
 
+    console.log('💰 Payment session details:', {
+      userId,
+      userEmail,
+      type,
+      sessionId: session.id,
+      amount: session.amount_total / 100
+    });
+
     try {
+      // Check if payment already exists
       const existingPayment = await Payment.findOne({ transactionId: session.id });
+      
       if (!existingPayment) {
+        console.log('📝 Creating payment record...');
+        
+        // Create payment record
         await Payment.create({
           userId,
           userEmail,
@@ -138,21 +156,70 @@ const handleWebhook = async (req, res) => {
           paidAt: new Date()
         });
 
+        console.log('✅ Payment record created');
+
+        // ✅ FIXED: Handle premium membership with better error handling
         if (type === 'premium_membership') {
-          await User.updateById(userId, { isPremium: true });
+          console.log('🔄 Upgrading user to premium:', userEmail);
+          console.log('👤 User ID:', userId);
+
+          // Validate userId
+          if (!userId) {
+            console.error('❌ User ID is missing in webhook metadata!');
+            return res.status(400).send('User ID is required');
+          }
+
+          // ✅ FIXED: Multiple update attempts with logging
+          try {
+            // Method 1: updateById
+            const updateResult = await User.updateById(userId, { isPremium: true });
+            console.log('📊 UpdateById result:', updateResult);
+
+            // Method 2: Direct updateOne as fallback
+            if (!updateResult || updateResult.modifiedCount === 0) {
+              console.log('⚠️ updateById failed, trying direct updateOne...');
+              const directResult = await User.updateOne(
+                { _id: typeof userId === 'string' ? userId : userId.toString() },
+                { isPremium: true }
+              );
+              console.log('📊 Direct update result:', directResult);
+            }
+
+            // ✅ Verify the update
+            const updatedUser = await User.findById(userId);
+            console.log('👤 Updated user premium status:', {
+              email: updatedUser?.email,
+              isPremium: updatedUser?.isPremium,
+              id: updatedUser?._id
+            });
+
+            if (updatedUser && updatedUser.isPremium === true) {
+              console.log('✅ User successfully upgraded to premium! 🎉');
+            } else {
+              console.error('❌ Failed to upgrade user to premium!');
+              console.error('User data:', updatedUser);
+            }
+          } catch (updateError) {
+            console.error('❌ Error updating user premium status:', updateError);
+            // ✅ Don't return error, just log it - we'll try again on verify
+          }
         }
 
-        console.log(`✅ Payment successful: ${session.id} for ${type}`);
+        console.log(`✅ Payment processed successfully: ${session.id}`);
+      } else {
+        console.log('ℹ️ Payment already processed:', session.id);
       }
     } catch (error) {
-      console.error('Error processing webhook:', error);
-      return res.status(500).send('Webhook processing failed');
+      console.error('❌ Error processing webhook:', error);
+      // ✅ Return 200 to prevent Stripe from retrying
+      return res.status(200).send('Webhook processing failed but acknowledged');
     }
   }
 
   res.json({ received: true });
 };
 
+// ✅ FIXED: Verify payment with better error handling
 const verifyPayment = async (req, res) => {
   try {
     const { sessionId } = req.query;
@@ -165,13 +232,20 @@ const verifyPayment = async (req, res) => {
     }
 
     console.log('🔍 Verifying payment for session:', sessionId);
+    console.log('👤 User:', req.user?.email);
 
+    // Retrieve session from Stripe
     const session = await stripe.checkout.sessions.retrieve(sessionId);
+    console.log('📊 Session status:', session.payment_status);
     
     if (session.payment_status === 'paid') {
+      // Check if payment already recorded
       let payment = await Payment.findOne({ transactionId: sessionId });
       
       if (!payment) {
+        console.log('📝 Creating payment record from verification...');
+        
+        // Create payment record
         payment = await Payment.create({
           userId: req.user._id,
           userEmail: req.user.email,
@@ -183,9 +257,37 @@ const verifyPayment = async (req, res) => {
           paidAt: new Date()
         });
 
+        console.log('✅ Payment record created from verification');
+
+        // ✅ FIXED: Update user to premium with verification
         if (session.metadata.type === 'premium_membership') {
-          await User.updateById(req.user._id, { isPremium: true });
-          console.log('✅ User upgraded to premium:', req.user.email);
+          console.log('🔄 Upgrading user to premium via verify:', req.user.email);
+          
+          // Try updateById
+          const updateResult = await User.updateById(req.user._id, { isPremium: true });
+          console.log('📊 Update result from verify:', updateResult);
+
+          // Try direct update if updateById failed
+          if (!updateResult || updateResult.modifiedCount === 0) {
+            console.log('⚠️ updateById failed, trying direct update...');
+            await User.updateOne(
+              { _id: req.user._id },
+              { isPremium: true }
+            );
+          }
+
+          // Verify the update
+          const updatedUser = await User.findById(req.user._id);
+          console.log('👤 Verified user premium status:', {
+            email: updatedUser?.email,
+            isPremium: updatedUser?.isPremium
+          });
+
+          if (updatedUser && updatedUser.isPremium) {
+            console.log('✅ User upgraded to premium via verify! 🎉');
+          } else {
+            console.warn('⚠️ User premium status not updated properly');
+          }
         }
       }
 
@@ -209,6 +311,7 @@ const verifyPayment = async (req, res) => {
   }
 };
 
+// Get purchased recipes
 const getPurchasedRecipes = async (req, res) => {
   try {
     const userId = req.user._id;

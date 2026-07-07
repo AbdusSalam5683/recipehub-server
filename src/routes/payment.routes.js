@@ -1,4 +1,3 @@
-// server/src/routes/payment.routes.js
 const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middleware/auth.middleware');
@@ -10,10 +9,11 @@ const {
   getPurchasedRecipes
 } = require('../controllers/payment.controller');
 
-// Webhook (no auth - needs raw body)
+// ✅ Webhook route - MUST come before express.json() middleware
+// This route needs raw body for Stripe signature verification
 router.post('/webhook', express.raw({type: 'application/json'}), handleWebhook);
 
-// Protected routes
+// ✅ Protected routes - require authentication
 router.use(verifyToken);
 router.post('/create-premium-checkout', createPremiumCheckout);
 router.post('/create-recipe-checkout', createRecipePurchaseCheckout);
