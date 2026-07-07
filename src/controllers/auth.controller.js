@@ -7,13 +7,30 @@ const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '7d' });
 };
 
+// ✅ FIXED: Proper cookie options with domain
 const getCookieOptions = () => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
+    domain: isProduction ? '.vercel.app' : undefined,  // ✅ Added domain
+  };
+};
+
+// ✅ FIXED: Clear cookie options
+const getClearCookieOptions = () => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    path: '/',
+    domain: isProduction ? '.vercel.app' : undefined,
   };
 };
 
@@ -47,14 +64,12 @@ const register = async (req, res) => {
 
     let imageUrl = image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
     
-    // ✅ Fixed: Added try-catch for image upload
     if (image && image.startsWith('data:image')) {
       try {
         const { uploadToImgBB } = require('../utils/imgbbUploader');
         imageUrl = await uploadToImgBB(image);
       } catch (uploadError) {
         console.error('Image upload failed:', uploadError.message);
-        // ✅ Fallback to avatar
         imageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
       }
     }
@@ -69,7 +84,6 @@ const register = async (req, res) => {
       isBlocked: false
     });
 
-    // Log activity
     await logActivity({
       userId: user._id,
       userEmail: user.email,
@@ -86,7 +100,8 @@ const register = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
-      user: userWithoutPassword
+      user: userWithoutPassword,
+      token: token,  // ✅ Added token in response
     });
   } catch (error) {
     console.error('Register error:', error);
@@ -131,7 +146,6 @@ const login = async (req, res) => {
       });
     }
 
-    // Log activity
     await logActivity({
       userId: user._id,
       userEmail: user.email,
@@ -148,7 +162,8 @@ const login = async (req, res) => {
     res.json({
       success: true,
       message: 'Login successful',
-      user: userWithoutPassword
+      user: userWithoutPassword,
+      token: token,  // ✅ Added token in response
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -177,14 +192,12 @@ const googleLogin = async (req, res) => {
       
       let imageUrl = image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || email)}&background=random`;
       
-      // ✅ Fixed: Added try-catch for image upload
       if (image && image.startsWith('data:image')) {
         try {
           const { uploadToImgBB } = require('../utils/imgbbUploader');
           imageUrl = await uploadToImgBB(image);
         } catch (uploadError) {
           console.error('Google image upload failed:', uploadError.message);
-          // ✅ Fallback to avatar
           imageUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name || email)}&background=random`;
         }
       }
@@ -199,7 +212,6 @@ const googleLogin = async (req, res) => {
         isBlocked: false
       });
 
-      // Log activity
       await logActivity({
         userId: user._id,
         userEmail: user.email,
@@ -217,7 +229,6 @@ const googleLogin = async (req, res) => {
       });
     }
 
-    // Log activity
     await logActivity({
       userId: user._id,
       userEmail: user.email,
@@ -235,7 +246,7 @@ const googleLogin = async (req, res) => {
       success: true,
       message: 'Google login successful',
       user: userWithoutPassword,
-      token: token,
+      token: token,  // ✅ Added token in response
     });
   } catch (error) {
     console.error('Google login error:', error);
@@ -259,12 +270,7 @@ const logout = async (req, res) => {
       });
     }
 
-    res.clearCookie('token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      path: '/',
-    });
+    res.clearCookie('token', getClearCookieOptions());  // ✅ Fixed
     
     res.json({ 
       success: true,

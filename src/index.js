@@ -6,7 +6,6 @@ const morgan = require('morgan');
 const dotenv = require('dotenv');
 const { MongoClient } = require('mongodb');
 
-// ✅ সব Model এর setDB ইম্পোর্ট করুন
 const { setDB: setActivityDB } = require('./models/Activity.model');
 const { setDB: setUserDB } = require('./models/User.model');
 const { setDB: setRecipeDB } = require('./models/Recipe.model');
@@ -18,18 +17,17 @@ dotenv.config();
 
 const app = express();
 
-// ✅ Fixed: Production-Ready CORS Configuration with fallback
+// ✅ FIXED: No duplicate origins
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5000',
   'https://recipehub-client-six.vercel.app',
   'https://recipehub-server-psi.vercel.app',
-  process.env.CLIENT_URL || 'https://recipehub-client-six.vercel.app'
+  process.env.CLIENT_URL,
 ].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
@@ -40,7 +38,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cookie'],
   exposedHeaders: ['Set-Cookie', 'Cookie']
 }));
 
@@ -51,6 +49,7 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
+
 
 // ============================================
 // 📌 Root Routes
